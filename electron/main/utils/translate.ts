@@ -37,6 +37,16 @@ function splitIntoChunk(array: any[], by = 5) {
   return chunks;
 }
 
+function parseNumberedList(text: string, expectedCount: number): string[] | null {
+  const lines: string[] = [];
+  const regex = /^\d+\.\s*(.+)$/gm;
+  let match: RegExpExecArray | null;
+  while ((match = regex.exec(text)) !== null) {
+    lines.push(match[1].trim());
+  }
+  return lines.length === expectedCount ? lines : null;
+}
+
 async function translateSubtitleChunk(
   subtitles: string[],
   {
@@ -67,9 +77,12 @@ async function translateSubtitleChunk(
     .replaceAll("{{lang}}", lang)
     .replaceAll("{{additional}}", additional);
 
+  // Layer 1: Tool calling
+  // Note: catch {} swallows all errors including network/rate-limit.
+  // retryTranslate handles those at the outer level via layer 3.
+  // Acceptable tradeoff for local LLM use case (oMLX has no rate limits).
+  let toolTranslated: string[] | null = null;
   try {
-    // tool calling
-    let toolTranslated: string[] | null = null;
     const tools = {
       submit_translation: tool({
         description:
@@ -101,12 +114,20 @@ async function translateSubtitleChunk(
         JSON.stringify(subtitles),
       maxRetries: 2,
     });
+  } catch {
+    // Layer 1 failed silently, fall through to layer 2
+  }
 
-    if (toolTranslated && Array.isArray(toolTranslated)) {
-      return toolTranslated;
-    }
+  if (
+    toolTranslated &&
+    Array.isArray(toolTranslated) &&
+    toolTranslated.length === subtitles.length
+  ) {
+    return toolTranslated;
+  }
 
-    // Fallback 2: JSON object generation
+  // Layer 2: JSON object generation
+  try {
     const { object } = await generateObject({
       model: ai(model),
       temperature,
@@ -117,10 +138,32 @@ async function translateSubtitleChunk(
         JSON.stringify(subtitles),
       maxRetries: 3,
     });
-    return object;
-  } catch (e: any) {
-    throw e;
+    if (Array.isArray(object) && object.length === subtitles.length) {
+      return object;
+    }
+  } catch {
+    // Layer 2 failed silently, fall through to layer 3
   }
+
+  // Layer 3: Plain text numbered list
+  const numberedResult = await generateText({
+    model: ai(model),
+    temperature,
+    system:
+      systemPrompt +
+      "\nYou MUST reply ONLY with a numbered list. No explanations, no extra text.",
+    prompt:
+      "Translate each subtitle line. Reply ONLY in this exact format:\n1. [translation]\n2. [translation]\n...\n\nLines to translate:\n" +
+      subtitles.map((s, i) => `${i + 1}. ${s}`).join("\n"),
+    maxRetries: 2,
+  });
+
+  const parsed = parseNumberedList(numberedResult.text, subtitles.length);
+  if (parsed) return parsed;
+
+  throw new Error(
+    `Translation validation failed: all three layers produced wrong line count (expected ${subtitles.length})`
+  );
 }
 
 async function translateSubtitleSingle(
