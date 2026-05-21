@@ -83,6 +83,9 @@ async function translateSubtitleChunk(
     .replaceAll("{{additional}}", additional);
 
   // Layer 1: Tool calling
+  // Note: catch {} swallows all errors including network/rate-limit.
+  // retryTranslate handles those at the outer level via layer 3.
+  // Acceptable tradeoff for local LLM use case (oMLX has no rate limits).
   let toolTranslated: string[] | null = null;
   try {
     const tools = {
@@ -714,9 +717,9 @@ if (progressData.status === "done") {
 }
 ```
 
-- [ ] **Step 4：在 modal 開啟前計算 failedKeySet，並在 modal 的 cue 渲染中加橙色標示**
+- [ ] **Step 4：在 `return` 語句之前宣告 `failedKeySet` 和 `makeCueKey`，並在 modal 的 cue 渲染中加橙色標示**
 
-在 `TranslatorPanel` component 的 return 中，找到 modal 的 `{cues.map((cue: any, index: number) => (` 前方，加入：
+在 `TranslatorPanel` component 的 `return (` **之前**（與 `const isDisabled = isTranslating;` 同一層級）加入：
 
 ```typescript
 const failedKeySet = new Set<string>(
@@ -728,6 +731,8 @@ const makeCueKey = (start: any, end: any): string => {
   return `${norm(start)}|${norm(end)}`;
 };
 ```
+
+> **注意：** 這兩個宣告必須在 `return` 語句之外，不能放在 JSX 內。
 
 然後找到：
 ```typescript
@@ -835,10 +840,9 @@ export default configureStore({
 移除後，`useOpenAI.ts` 的 import 區塊應只剩：
 ```typescript
 import { useLocalStorage } from "usehooks-ts";
-import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 ```
 
-（確認 `z`、`generateObject`、`generateText`、`tool` 的 import 也一併移除，因為只有 `useTranslate` 使用它們）
+`createOpenAICompatible`、`z`、`generateObject`、`generateText`、`tool` 都只在 `useTranslate` 中使用，全部一併移除。
 
 - [ ] **Step 4：型別檢查確認無殘留引用**
 
