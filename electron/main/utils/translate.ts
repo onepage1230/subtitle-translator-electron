@@ -362,6 +362,20 @@ function saveTranslated(
   }
 }
 
+function deduplicateLines(text: string): string {
+  const seen = new Set<string>();
+  return text
+    .split('\n')
+    .filter(line => {
+      const trimmed = line.trim();
+      if (!trimmed) return true;
+      if (seen.has(trimmed)) return false;
+      seen.add(trimmed);
+      return true;
+    })
+    .join('\n');
+}
+
 async function analyzeSubtitlesForContext(
   subtitles: string[],
   {
@@ -414,7 +428,7 @@ Analyze subtitle samples and return two outputs:
         subtitles.join("\n"),
       maxRetries: 2,
     });
-    return result.text;
+    return deduplicateLines(result.text);
   } catch (e) {
     return "";
   }
