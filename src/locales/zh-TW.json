@@ -109,7 +109,9 @@
         "plot_summary": "劇情摘要",
         "glossary": "詞彙表"
       },
-      "not_translated_yet": "尚未翻譯"
+      "not_translated_yet": "尚未翻譯",
+      "line_failed": "翻譯失敗",
+      "done_with_failures": "完成（{{count}} 行翻譯失敗）- 100.0%"
     }
   }
 }

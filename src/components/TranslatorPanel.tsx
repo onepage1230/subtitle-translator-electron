@@ -26,6 +26,8 @@ interface ProgressType {
   totalCues?: number;
   currentCue?: number;
   analysis?: string;
+  failedCues?: number;
+  failedKeys?: string[];
 }
 
 export default function TranslatorPanel() {
@@ -245,6 +247,15 @@ export default function TranslatorPanel() {
     ? batchProgress[selectedFile.path]?.analysis
     : undefined;
 
+  const failedKeySet = new Set<string>(
+    selectedFile ? (batchProgress[selectedFile.path]?.failedKeys || []) : []
+  );
+  const makeCueKey = (start: any, end: any): string => {
+    const norm = (v: any) =>
+      typeof v === "number" ? Math.round(v) : String(v).trim();
+    return `${norm(start)}|${norm(end)}`;
+  };
+
   return (
     <div className="w-full h-full flex flex-col">
       <div className="flex flex-row w-full flex-1">
@@ -380,24 +391,23 @@ export default function TranslatorPanel() {
                     status: "pending" as const,
                   };
                   let statusText = "";
-                  if (
+                  if (progressData.status === "done") {
+                    statusText =
+                      progressData.failedCues && progressData.failedCues > 0
+                        ? t("translate.done_with_failures", { count: progressData.failedCues })
+                        : `done - 100.0%`;
+                  } else if (
                     progressData.status === "translating" &&
                     progressData.currentCue &&
                     progressData.totalCues
                   ) {
-                    statusText = `Translating cue ${
-                      progressData.currentCue
-                    } of ${
+                    statusText = `Translating cue ${progressData.currentCue} of ${
                       progressData.totalCues
                     } - ${progressData.progress.toFixed(1)}%`;
                   } else if (progressData.status === "analyzing") {
-                    statusText = `${t(
-                      "translate.analyzing_context"
-                    )} - ${progressData.progress.toFixed(1)}%`;
+                    statusText = `${t("translate.analyzing_context")} - ${progressData.progress.toFixed(1)}%`;
                   } else {
-                    statusText = `${
-                      progressData.status
-                    } - ${progressData.progress.toFixed(1)}%`;
+                    statusText = `${progressData.status} - ${progressData.progress.toFixed(1)}%`;
                   }
                   return (
                     <div
@@ -472,17 +482,30 @@ export default function TranslatorPanel() {
                     <hr className="my-2" />
                   </div>
                 )}
-                {cues.map((cue: any, index: number) => (
-                  <div
-                    key={index}
-                    className="border border-gray-300 p-1 px-2 mb-1 rounded"
-                  >
-                    <div>{cue.text}</div>
-                    <div className="text-sm opacity-75">
-                      {cue.translatedText || t("translate.not_translated_yet")}
+                {cues.map((cue: any, index: number) => {
+                  const isFailed = failedKeySet.has(makeCueKey(cue.start, cue.end));
+                  return (
+                    <div
+                      key={index}
+                      className={`p-1 px-2 mb-1 rounded border ${
+                        isFailed
+                          ? "border-orange-300 bg-orange-50"
+                          : "border-gray-300"
+                      }`}
+                    >
+                      <div>{cue.text}</div>
+                      <div
+                        className={`text-sm ${
+                          isFailed ? "text-orange-500" : "opacity-75"
+                        }`}
+                      >
+                        {isFailed
+                          ? t("translate.line_failed")
+                          : cue.translatedText || t("translate.not_translated_yet")}
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           </div>

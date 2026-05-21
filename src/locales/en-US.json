@@ -109,7 +109,9 @@
         "plot_summary": "Plot summary",
         "glossary": "Glossary"
       },
-      "not_translated_yet": "Not translated yet"
+      "not_translated_yet": "Not translated yet",
+      "line_failed": "Translation failed",
+      "done_with_failures": "done ({{count}} lines failed) - 100.0%"
     }
   }
 }
