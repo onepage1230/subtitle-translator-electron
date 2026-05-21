@@ -111,7 +111,13 @@
       },
       "not_translated_yet": "Not translated yet",
       "line_failed": "Translation failed",
-      "done_with_failures": "done ({{count}} lines failed) - 100.0%"
+      "done_with_failures": "done ({{count}} lines failed) - 100.0%",
+      "reanalyze_dialog": {
+        "message": "{{count}} file(s) have a cached analysis. Re-analyze?",
+        "hint": "Files without a cache will be analyzed automatically.",
+        "reanalyze": "Re-analyze",
+        "use_cache": "Use cached"
+      }
     }
   }
 }

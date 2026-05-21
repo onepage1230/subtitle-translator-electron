@@ -111,7 +111,13 @@
       },
       "not_translated_yet": "尚未翻譯",
       "line_failed": "翻譯失敗",
-      "done_with_failures": "完成（{{count}} 行翻譯失敗）- 100.0%"
+      "done_with_failures": "完成（{{count}} 行翻譯失敗）- 100.0%",
+      "reanalyze_dialog": {
+        "message": "偵測到 {{count}} 個檔案有先前的分析結果，是否重新分析？",
+        "hint": "無快取的檔案將自動分析。",
+        "reanalyze": "重新分析",
+        "use_cache": "使用快取"
+      }
     }
   }
 }

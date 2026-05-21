@@ -56,6 +56,8 @@ export default function TranslatorPanel() {
   const [selectedFile, setSelectedFile] = useState<FileType | null>(null);
   const [cues, setCues] = useState<any[]>([]);
   const [modalOpen, setModalOpen] = useState(false);
+  const [reanalyzeDialogOpen, setReanalyzeDialogOpen] = useState(false);
+  const [cachedCount, setCachedCount] = useState(0);
   // throttle live preview reload
   const lastPreviewUpdateRef = useRef<number>(0);
 
@@ -107,14 +109,7 @@ export default function TranslatorPanel() {
       0
     ) / (files.length || 1);
 
-  const startBatchTranslation = async () => {
-    if (
-      files.length === 0 ||
-      keys.filter((k: string) => k.length > 0).length === 0
-    ) {
-      toast.error("No API keys configured");
-      return;
-    }
+  const executeBatchTranslation = async (forceReanalyze: boolean) => {
     setIsTranslating(true);
     setBatchProgress(
       files.reduce<Record<string, ProgressType>>(
@@ -135,6 +130,7 @@ export default function TranslatorPanel() {
       temperature,
       multiLangSave,
       delay: delay * 1000,
+      forceReanalyze,
     };
     try {
       await ipcRenderer.invoke("batch-translate", { files, params });
@@ -144,6 +140,27 @@ export default function TranslatorPanel() {
       toast.error(`Batch translation failed: ${error.message}`);
       setIsTranslating(false);
     }
+  };
+
+  const startBatchTranslation = async () => {
+    if (
+      files.length === 0 ||
+      keys.filter((k: string) => k.length > 0).length === 0
+    ) {
+      toast.error("No API keys configured");
+      return;
+    }
+    const filePaths = files.map((f) => f.path);
+    const cachedPaths: string[] = await ipcRenderer.invoke(
+      "check-analysis-cache",
+      filePaths
+    );
+    if (cachedPaths.length > 0) {
+      setCachedCount(cachedPaths.length);
+      setReanalyzeDialogOpen(true);
+      return;
+    }
+    executeBatchTranslation(false);
   };
 
   const loadCues = async (filePath: string) => {
@@ -507,6 +524,37 @@ export default function TranslatorPanel() {
                   );
                 })}
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Reanalyze dialog */}
+      {reanalyzeDialogOpen && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white p-6 rounded max-w-sm w-full mx-4 shadow-xl">
+            <p className="mb-1">
+              {t("translate.reanalyze_dialog.message", { count: cachedCount })}
+            </p>
+            <p className="text-sm text-gray-500 mb-4">
+              {t("translate.reanalyze_dialog.hint")}
+            </p>
+            <div className="flex gap-2 justify-end">
+              <Button
+                onClick={() => {
+                  setReanalyzeDialogOpen(false);
+                  executeBatchTranslation(true);
+                }}
+              >
+                {t("translate.reanalyze_dialog.reanalyze")}
+              </Button>
+              <Button
+                onClick={() => {
+                  setReanalyzeDialogOpen(false);
+                  executeBatchTranslation(false);
+                }}
+              >
+                {t("translate.reanalyze_dialog.use_cache")}
+              </Button>
             </div>
           </div>
         </div>

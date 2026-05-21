@@ -111,7 +111,13 @@
       },
       "not_translated_yet": "尚未翻译",
       "line_failed": "翻译失败",
-      "done_with_failures": "完成（{{count}} 行翻译失败）- 100.0%"
+      "done_with_failures": "完成（{{count}} 行翻译失败）- 100.0%",
+      "reanalyze_dialog": {
+        "message": "检测到 {{count}} 个档案有先前的分析结果，是否重新分析？",
+        "hint": "无缓存的档案将自动分析。",
+        "reanalyze": "重新分析",
+        "use_cache": "使用缓存"
+      }
     }
   }
 }
