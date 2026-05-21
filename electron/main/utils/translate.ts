@@ -301,7 +301,7 @@ function saveTranslated(
             ...x.data,
             text: parseTranslatedText(
               x.data.text,
-              x.data.translatedText || x.data.text
+              (x.data.translatedText === "__FAILED__" ? "" : x.data.translatedText) || x.data.text
             ),
           },
         };
@@ -320,10 +320,14 @@ function saveTranslated(
           x.body = x.body.map((line: any) => {
             if (line.key === "Dialogue") {
               const currentEvent = events[dialogueIndex++];
-              const translatedText =
+              const rawTranslated =
                 currentEvent && currentEvent.data
-                  ? currentEvent.data.translatedText || line.value.Text
-                  : line.value.Text;
+                  ? currentEvent.data.translatedText
+                  : undefined;
+              const translatedText =
+                rawTranslated === "__FAILED__" || !rawTranslated
+                  ? line.value.Text
+                  : rawTranslated;
               return {
                 key: "Dialogue",
                 value: {
