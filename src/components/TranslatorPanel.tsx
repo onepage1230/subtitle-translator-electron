@@ -259,6 +259,15 @@ export default function TranslatorPanel() {
     }
   }, [batchProgress, selectedFile, modalOpen]);
 
+  useEffect(() => {
+    if (!reanalyzeDialogOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setReanalyzeDialogOpen(false);
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [reanalyzeDialogOpen]);
+
   const isDisabled = isTranslating;
   const selectedAnalysis = selectedFile
     ? batchProgress[selectedFile.path]?.analysis
@@ -530,7 +539,10 @@ export default function TranslatorPanel() {
       )}
       {/* Reanalyze dialog */}
       {reanalyzeDialogOpen && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <div
+          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+          onClick={(e) => e.target === e.currentTarget && setReanalyzeDialogOpen(false)}
+        >
           <div className="bg-white p-6 rounded max-w-sm w-full mx-4 shadow-xl">
             <p className="mb-1">
               {t("translate.reanalyze_dialog.message", { count: cachedCount })}
