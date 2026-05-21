@@ -13,6 +13,12 @@ import {
   analyzeSubtitlesForContext,
 } from "./utils/translate";
 
+function makeKey(start: any, end: any): string {
+  const norm = (v: any) =>
+    typeof v === "number" ? Math.round(v) : String(v).trim();
+  return `${norm(start)}|${norm(end)}`;
+}
+
 // The built directory structure
 //
 // ├─┬ dist-electron
@@ -229,6 +235,38 @@ ipcMain.handle("batch-translate", async (event, { files, params }) => {
         path.dirname(file.path),
         file.name.replace(/\.[^/.]+$/, "") + ".translated." + ext
       );
+
+      // Resume: pre-populate translatedText from existing translated file
+      if (fs.existsSync(outputPath)) {
+        try {
+          const existingContent = fs.readFileSync(outputPath, "utf8");
+          let existingParsed = parseSubtitle(existingContent, ext);
+          let existingCues: any[];
+          if (Array.isArray(existingParsed)) {
+            existingCues = existingParsed.filter((l: any) => l.type === "cue");
+          } else if ((existingParsed as any).events) {
+            existingCues = (existingParsed as any).events;
+          } else {
+            existingCues = existingParsed as any[];
+          }
+          const resumeMap = new Map<string, string>();
+          existingCues.forEach((cue: any) => {
+            if (cue.data) {
+              resumeMap.set(makeKey(cue.data.start, cue.data.end), cue.data.text || "");
+            }
+          });
+          subtitle.forEach((cue: any) => {
+            const key = makeKey(cue.data.start, cue.data.end);
+            const existingText = resumeMap.get(key);
+            // Only pre-populate if translated text differs from original (avoids treating __FAILED__ lines as done)
+            if (existingText !== undefined && existingText !== cue.data.text) {
+              cue.data.translatedText = existingText;
+            }
+          });
+        } catch (resumeErr) {
+          console.warn("Resume pre-population failed, starting fresh:", resumeErr);
+        }
+      }
 
       // Build analysis context (plot summary + glossary) and attach to all requests
       const allTexts = subtitle
@@ -542,12 +580,6 @@ ipcMain.handle("get-subtitle-preview", async (event, filePath) => {
   // Prefer time-based alignment to avoid index drift; fallback to index-based if needed
   let translatedCuesArray: string[] | null = null;
   let translatedMap: Map<string, string> | null = null;
-
-  const makeKey = (start: any, end: any) => {
-    const norm = (v: any) =>
-      typeof v === "number" ? Math.round(v) : String(v).trim();
-    return `${norm(start)}|${norm(end)}`;
-  };
 
   if (fs.existsSync(translatedPath)) {
     const translatedContent = fs.readFileSync(translatedPath, "utf8");
