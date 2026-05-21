@@ -230,6 +230,8 @@ ipcMain.handle("batch-translate", async (event, { files, params }) => {
       });
       const ext = path.extname(file.path).slice(1).toLowerCase();
       const content = fs.readFileSync(file.path, "utf8");
+      const fileHash = hashContent(content);
+      const cacheFile = file.path.replace(/\.[^/.]+$/, "") + ".analysis.json";
       let parsed = parseSubtitle(content, ext);
       let subtitle;
       if (Array.isArray(parsed)) {
@@ -301,22 +303,38 @@ ipcMain.handle("batch-translate", async (event, { files, params }) => {
       let combinedAdditional = params.additional || "";
       let analysisData: any = null;
       try {
-        const analysis = await analyzeSubtitlesForContext(allTexts, {
-          apiKeys: params.apiKeys || [],
-          apiHost: params.apiHost || "https://api.openai.com/v1",
-
-          model: params.model || "",
-          lang: params.lang || "",
-          temperature: 0.3,
-        });
+        let analysis = "";
+        let usedCache = false;
+        if (!params.forceReanalyze && fs.existsSync(cacheFile)) {
+          try {
+            const cached = JSON.parse(fs.readFileSync(cacheFile, "utf8"));
+            if (cached.contentHash === fileHash && cached.analysis) {
+              analysis = cached.analysis;
+              usedCache = true;
+            }
+          } catch {}
+        }
+        if (!usedCache) {
+          analysis = await analyzeSubtitlesForContext(allTexts, {
+            apiKeys: params.apiKeys || [],
+            apiHost: params.apiHost || "https://api.openai.com/v1",
+            model: params.model || "",
+            lang: params.lang || "",
+            temperature: 0.3,
+          });
+          try {
+            fs.writeFileSync(
+              cacheFile,
+              JSON.stringify({ contentHash: fileHash, analysis }),
+              "utf8"
+            );
+          } catch {}
+        }
         combinedAdditional = `${
           combinedAdditional ? combinedAdditional + "\n\n" : ""
         }[Context]\n${analysis}`;
-
         analysisData = analysis;
-        // Save in cache for renderer retrieval
         analysisCache.set(file.path, analysis);
-        // Notify renderer with analysis result so UI can display it
         event.sender.send("batch-progress", {
           filePath: file.path,
           progress: 4,
