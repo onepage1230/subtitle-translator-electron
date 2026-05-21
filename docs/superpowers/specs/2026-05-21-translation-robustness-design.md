@@ -43,7 +43,7 @@ splitIntoChunk（已有 translatedText 的行自動跳過）
 
 ### 關鍵設計決策
 
-- **時間戳 Key 匹配**：用 `Math.round(start) + "|" + Math.round(end)` 作為 Key，與 `get-subtitle-preview` 現有邏輯一致，不依賴索引順序，正確處理並行翻譯的非連續完成順序。
+- **時間戳 Key 匹配**：沿用 `get-subtitle-preview` handler 已有的 `makeKey` 邏輯（`norm = v => typeof v === "number" ? Math.round(v) : String(v).trim()`），確保 SRT/VTT（數字 ms）和 ASS（字串如 `"0:00:12.50"`）都能正確產生 Key，不依賴索引順序，正確處理並行翻譯的非連續完成順序。
 - **`__FAILED__` 視為未翻譯**：Resume 邏輯只預填真正有翻譯內容的行（非空、非 `__FAILED__`），讓失敗行在下次執行時自動重試。
 - **原子寫入保護**：現有的 `.tmp` rename 機制已防止讀取到寫一半的檔案。
 
@@ -96,7 +96,7 @@ translateSubtitleChunk（含三層 fallback）
 ### 失敗行的處理
 
 - **儲存時**：`saveTranslated` 需明確處理 `__FAILED__`——因為它是 truthy 字串，現有的 `translatedText || text` 邏輯會錯誤地寫入 `"__FAILED__"` 字面值。需改為 `(translatedText === "__FAILED__" || !translatedText) ? text : translatedText`。
-- **UI 顯示**：翻譯完成的 `batch-progress` done 事件加入 `failedCues: number`。`TranslatorPanel` 在檔案列表顯示「完成（N 行翻譯失敗）」。Modal 內，`translatedText === "__FAILED__"` 的行以橙色標示。
+- **UI 顯示**：翻譯完成的 `batch-progress` done 事件加入 `failedCues: number`（失敗行數）與 `failedKeys: string[]`（失敗行的 `start|end` 時間戳 key 集合）。`TranslatorPanel` 在檔案列表顯示「完成（N 行翻譯失敗）」。Modal 開啟時，renderer 用 `failedKeys` 集合對照每個 cue 的 `start|end` key 決定是否標示橙色——不依賴磁碟檔案內容（`saveTranslated` 已將 `__FAILED__` 轉回原文，磁碟上不存在此標記）。
 - **重試**：使用者直接再按「開始翻譯」，Resume 機制自動跳過成功行、重試 `__FAILED__` 行，無需額外 UI。
 
 ---
@@ -136,6 +136,17 @@ Delay 在每個 chunk 完成後暫停，推遲釋放 pool slot，有效控制對
 ### 保留項目
 
 `useOpenAI.ts` 的其他 exports（`useAPIKeys`、`useAPIHost`、`useAPIProvider`、`useTemperature`）仍在使用，保留。
+
+---
+
+## 驗收標準
+
+| 功能 | 驗證方式 |
+|------|---------|
+| Resume | 翻譯至約 50% 手動中止，重新按開始，進度條從中斷點繼續而非從 0% |
+| Fallback + 錯誤隔離 | 使用本地模型翻譯，即使某些 chunk schema 失敗，整個檔案仍完成，失敗行在 modal 顯示橙色 |
+| Delay | 在 Settings 設定 delay 後，main process log 可見每個 chunk 之間有對應間隔 |
+| 死碼清理 | `tsc` 型別檢查通過，無 `step`、`useTranslate` 相關引用殘留 |
 
 ---
 
