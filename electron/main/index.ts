@@ -237,7 +237,9 @@ ipcMain.handle("batch-translate", async (event, { files, params }) => {
       );
 
       // Resume: pre-populate translatedText from existing translated file
-      if (fs.existsSync(outputPath)) {
+      // Skip when multiLangSave is active — saved text is a combined string, not pure translation
+      const canResume = !params.multiLangSave || params.multiLangSave === "none";
+      if (canResume && fs.existsSync(outputPath)) {
         try {
           const existingContent = fs.readFileSync(outputPath, "utf8");
           let existingParsed = parseSubtitle(existingContent, ext);
@@ -480,7 +482,7 @@ ipcMain.handle("batch-translate", async (event, { files, params }) => {
       };
 
       for await (const _ of pool(10, chunks, chunkProcessor)) {
-        // Process chunks in parallel with concurrency 2
+        // Process chunks in parallel
       }
 
       // Fallback for untranslated
