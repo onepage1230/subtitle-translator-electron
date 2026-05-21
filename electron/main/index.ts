@@ -3,6 +3,7 @@ import { release } from "node:os";
 import { join } from "node:path";
 import fs from "node:fs";
 import path from "node:path";
+import crypto from "node:crypto";
 import pool from "tiny-async-pool";
 import {
   splitIntoChunk,
@@ -148,6 +149,28 @@ ipcMain.on("batch-progress", (event, data) => {
 
 // Cache analysis per file so renderer can fetch it on demand
 const analysisCache = new Map<string, any>();
+
+function hashContent(content: string): string {
+  return crypto.createHash("sha256").update(content).digest("hex");
+}
+
+ipcMain.handle("check-analysis-cache", async (_, filePaths: string[]) => {
+  const cached: string[] = [];
+  for (const filePath of filePaths) {
+    const cacheFile = filePath.replace(/\.[^/.]+$/, "") + ".analysis.json";
+    if (!fs.existsSync(cacheFile)) continue;
+    try {
+      const { contentHash, analysis } = JSON.parse(
+        fs.readFileSync(cacheFile, "utf8")
+      );
+      const fileContent = fs.readFileSync(filePath, "utf8");
+      if (contentHash === hashContent(fileContent) && analysis) {
+        cached.push(filePath);
+      }
+    } catch {}
+  }
+  return cached;
+});
 
 async function retryTranslate(fn, params, maxRetries = 5, delay = 1000) {
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
