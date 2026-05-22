@@ -25,7 +25,8 @@ Two independent performance issues:
 
 ```
 allTexts (all subtitle lines)
-  ↓ split evenly into 3 sections (each ≈ Math.ceil(total/3) lines; last section may be shorter)
+  ↓ split evenly into 3 sections (constant ANALYSIS_SECTIONS = 3; each ≈ Math.ceil(total/3) lines; last section may be shorter)
+     — 3 chosen as the minimum that enables meaningful parallelism while keeping API call count low
   ↓ Promise.all × 3  (parallel)
     each section → generateObject + zod schema
     returns: { plotSummary: string, glossary: GlossaryItem[] }
@@ -37,7 +38,7 @@ allTexts (all subtitle lines)
     ## Plot Summary
     {synthesized summary}
     ## Glossary
-    - {term}: {preferredTranslation ?? description}
+    - {term}: {translation}
     ...
 ```
 
@@ -47,15 +48,15 @@ z.object({
   plotSummary: z.string(),
   glossary: z.array(z.object({
     term: z.string(),
-    description: z.string(),
-    preferredTranslation: z.string().optional(),
+    translation: z.string(),
   }))
 })
 ```
+`translation` is the preferred rendering of the term in the target language (e.g. a character name's localized form, or jargon equivalent). If no translation exists, the model outputs the original term. This avoids mixing semantically distinct fields (`description` vs `preferredTranslation`) at the injection site.
 
 **Synthesis call**: Takes the three `plotSummary` strings as input, asks the model to produce one coherent narrative. Input is ~300–600 tokens; expected to complete in under 15 seconds. Uses the same model and API key as analysis.
 
-**Glossary injection**: Only `term` and `preferredTranslation` (falling back to `description`) are injected into each translation chunk prompt. The `description` field is stored in the cache but omitted from the per-chunk context to keep prompt size small.
+**Glossary injection**: `term` and `translation` are injected into each translation chunk prompt as `- term: translation`.
 
 **Expected improvement**: 10–20 min → ~2–4 min (3 parallel sections + one lightweight synthesis call).
 
@@ -65,7 +66,7 @@ z.object({
   "contentHash": "...",
   "analysis": {
     "plotSummary": "...",
-    "glossary": [{ "term": "...", "description": "...", "preferredTranslation": "..." }]
+    "glossary": [{ "term": "...", "translation": "..." }]
   }
 }
 ```
@@ -84,6 +85,8 @@ function isLocalModel(apiHost: string): boolean {
 const defaultConcurrency = isLocalModel(params.apiHost) ? 3 : 10;
 const concurrency = params.concurrentRequests ?? defaultConcurrency;
 ```
+
+**Known limitation**: `isLocalModel` only matches loopback addresses. Models hosted on a LAN machine (e.g. `192.168.x.x`) or via a custom hostname are not detected as local and will default to `pool(10)`. Users in this scenario should set Concurrent Requests manually in settings.
 
 Applied to the chunk pool in `batch-translate`:
 ```typescript
@@ -131,7 +134,6 @@ Replace both occurrences of `version != newVersion` with `isNewerVersion(newVers
 | `electron/main/utils/translate.ts` | Rewrite `analyzeSubtitlesForContext`: add zod schema, switch to `generateObject`, add synthesis helper |
 | `electron/main/index.ts` | Parallel section split, Promise.all analysis, synthesis call, cache format update, `isLocalModel` detection, concurrency parameter |
 | `src/pages/settings.tsx` | Add Concurrent requests number input |
-| `src/hooks/useLocalStorage.ts` (or equivalent) | `concurrent_requests` key consumed by settings |
 | `src/locales/en-US.json` | Add `concurrent_requests` i18n keys |
 | `src/locales/zh-TW.json` | Add `concurrent_requests` i18n keys |
 | `src/locales/zh-CN.json` | Add `concurrent_requests` i18n keys |
@@ -145,6 +147,18 @@ Replace both occurrences of `version != newVersion` with `isNewerVersion(newVers
 - **Synthesis call fails**: fall back to labeled concatenation (`[Act 1] ... [Act 2] ... [Act 3] ...`) rather than blocking translation.
 - **Cache format mismatch**: if `cached.analysis` is a string (old format) instead of an object, treat as cache miss and re-run analysis.
 - **`concurrent_requests` out of range**: clamp to [1, 20] before use.
+
+---
+
+## Success Criteria
+
+| Item | Verification |
+|---|---|
+| Analysis speed | Same long-film subtitle file: wall-clock time from analysis start to translation start drops from 10–20 min to under 5 min |
+| Glossary dedup | Merged glossary output contains no duplicate `term` values (case-insensitive) |
+| Structured output | Analysis cache `.analysis.json` stores `{ plotSummary, glossary: [{term, translation}] }` (object, not string) |
+| Concurrency auto-detect | `apiHost = "http://localhost:1234"` → console/log shows pool size 3; cloud URL → pool size 10 |
+| Version fix | `isNewerVersion("v1.8.0", "1.9.0")` returns `false`; `isNewerVersion("v2.0.0", "1.9.0")` returns `true` |
 
 ---
 
