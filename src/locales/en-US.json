@@ -21,6 +21,10 @@
       "title": "Delay",
       "description": "The delay between each translation request. This is used to prevent the API from being overloaded. The unit is in seconds."
     },
+    "concurrent_requests": {
+      "title": "Concurrent Requests",
+      "description": "Number of subtitle chunks processed in parallel. Lower values (2–3) work better for local models. Leave empty to auto-detect (3 for local, 10 for cloud API)."
+    },
     "api": {
       "title": "API & Host",
       "key": {

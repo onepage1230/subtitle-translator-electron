@@ -48,6 +48,10 @@ export default function TranslatorPanel() {
   const [apiHost] = useAPIHost();
   const [temperature] = useTemperature();
   const [multiLangSave] = useLocalStorage("multi_language_save", "none");
+  const [concurrentRequests] = useLocalStorage<number | undefined>(
+    "concurrent_requests",
+    undefined
+  );
   const [batchProgress, setBatchProgress] = useState<
     Record<string, ProgressType>
   >({});
@@ -131,6 +135,7 @@ export default function TranslatorPanel() {
       multiLangSave,
       delay: delay * 1000,
       forceReanalyze,
+      concurrentRequests,
     };
     try {
       await ipcRenderer.invoke("batch-translate", { files, params });

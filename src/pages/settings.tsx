@@ -5,6 +5,7 @@ import Save from "@/components/settings/Save";
 import Prompt from "@/components/settings/Prompt";
 import Reset from "@/components/settings/Reset";
 import Delay from "@/components/settings/Delay";
+import ConcurrentRequests from "@/components/settings/ConcurrentRequests";
 export default function Settings() {
   return (
     <div className="h-[calc(100vh-48px)] overflow-y-auto">
@@ -12,6 +13,7 @@ export default function Settings() {
         <Language />
         <API />
         <Delay />
+        <ConcurrentRequests />
         <Save />
         <Model />
         <Prompt />
