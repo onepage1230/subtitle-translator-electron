@@ -25,7 +25,7 @@ interface ProgressType {
   error?: string;
   totalCues?: number;
   currentCue?: number;
-  analysis?: string;
+  analysis?: { plotSummary: string; glossary: Array<{ term: string; translation: string }> };
   failedCues?: number;
   failedKeys?: string[];
 }
@@ -498,13 +498,29 @@ export default function TranslatorPanel() {
               <div className="overflow-x-auto">
                 {selectedAnalysis && (
                   <div className="mb-4">
-                    <div className="text-md font-semibold">
+                    <div className="text-md font-semibold mb-1">
                       {t("translate.context.title")}
                     </div>
-                    <p className="text-sm whitespace-pre-wrap">
-                      {selectedAnalysis}
+                    <div className="text-sm font-medium text-slate-700">
+                      {t("translate.context.plot_summary")}
+                    </div>
+                    <p className="text-sm whitespace-pre-wrap mb-2">
+                      {selectedAnalysis.plotSummary}
                     </p>
-
+                    {selectedAnalysis.glossary.length > 0 && (
+                      <>
+                        <div className="text-sm font-medium text-slate-700">
+                          {t("translate.context.glossary")}
+                        </div>
+                        <ul className="text-sm mt-1 space-y-0.5">
+                          {selectedAnalysis.glossary.map((g, i) => (
+                            <li key={i}>
+                              <span className="font-medium">{g.term}</span>: {g.translation}
+                            </li>
+                          ))}
+                        </ul>
+                      </>
+                    )}
                     <hr className="my-2" />
                   </div>
                 )}
