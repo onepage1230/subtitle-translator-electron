@@ -12,7 +12,15 @@ import {
   translateSubtitleSingle,
   saveTranslated,
   analyzeSubtitlesForContext,
+  type AnalysisResult,
 } from "./utils/translate";
+
+function analysisResultToString(result: AnalysisResult): string {
+  const glossaryLines = result.glossary
+    .map((g) => `${g.term} → ${g.translation}`)
+    .join("\n");
+  return `Plot Summary:\n${result.plotSummary}${glossaryLines ? `\n\nGlossary:\n${glossaryLines}` : ""}`;
+}
 
 function makeKey(start: any, end: any): string {
   const norm = (v: any) =>
@@ -301,21 +309,21 @@ ipcMain.handle("batch-translate", async (event, { files, params }) => {
         .filter((t: string) => t && t.length > 0);
 
       let combinedAdditional = params.additional || "";
-      let analysisData: any = null;
+      let analysisData: AnalysisResult | null = null;
       try {
-        let analysis = "";
+        let analysisResult: AnalysisResult | null = null;
         let usedCache = false;
         if (!params.forceReanalyze && fs.existsSync(cacheFile)) {
           try {
             const cached = JSON.parse(fs.readFileSync(cacheFile, "utf8"));
             if (cached.contentHash === fileHash && cached.analysis) {
-              analysis = cached.analysis;
+              analysisResult = cached.analysis;
               usedCache = true;
             }
           } catch {}
         }
         if (!usedCache) {
-          analysis = await analyzeSubtitlesForContext(allTexts, {
+          analysisResult = await analyzeSubtitlesForContext(allTexts, {
             apiKeys: params.apiKeys || [],
             apiHost: params.apiHost || "https://api.openai.com/v1",
             model: params.model || "",
@@ -325,24 +333,27 @@ ipcMain.handle("batch-translate", async (event, { files, params }) => {
           try {
             fs.writeFileSync(
               cacheFile,
-              JSON.stringify({ contentHash: fileHash, analysis }),
+              JSON.stringify({ contentHash: fileHash, analysis: analysisResult }),
               "utf8"
             );
           } catch {}
         }
-        combinedAdditional = `${
-          combinedAdditional ? combinedAdditional + "\n\n" : ""
-        }[Context]\n${analysis}`;
-        analysisData = analysis;
-        analysisCache.set(file.path, analysis);
-        event.sender.send("batch-progress", {
-          filePath: file.path,
-          progress: 4,
-          status: "analyzing",
-          totalCues,
-          currentCue: 0,
-          analysis,
-        });
+        if (analysisResult) {
+          const analysisText = analysisResultToString(analysisResult);
+          combinedAdditional = `${
+            combinedAdditional ? combinedAdditional + "\n\n" : ""
+          }[Context]\n${analysisText}`;
+          analysisData = analysisResult;
+          analysisCache.set(file.path, analysisResult);
+          event.sender.send("batch-progress", {
+            filePath: file.path,
+            progress: 4,
+            status: "analyzing",
+            totalCues,
+            currentCue: 0,
+            analysis: analysisResult,
+          });
+        }
       } catch (analysisErr) {
         console.warn(
           "Context analysis failed, continue without it:",

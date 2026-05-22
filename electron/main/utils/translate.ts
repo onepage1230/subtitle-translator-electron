@@ -7,6 +7,18 @@ import { z } from "zod";
 import { generateObject, generateText, tool } from "ai";
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 
+const analysisSchema = z.object({
+  plotSummary: z.string(),
+  glossary: z.array(
+    z.object({
+      term: z.string(),
+      translation: z.string(),
+    })
+  ),
+});
+
+type AnalysisResult = z.infer<typeof analysisSchema>;
+
 function getAi({ apiKey, apiHost }: { apiKey: string; apiHost: string }) {
   return createOpenAICompatible({
     name: "openai",
@@ -362,20 +374,6 @@ function saveTranslated(
   }
 }
 
-function deduplicateLines(text: string): string {
-  const seen = new Set<string>();
-  return text
-    .split('\n')
-    .filter(line => {
-      const trimmed = line.trim();
-      if (!trimmed) return true;
-      if (seen.has(trimmed)) return false;
-      seen.add(trimmed);
-      return true;
-    })
-    .join('\n');
-}
-
 async function analyzeSubtitlesForContext(
   subtitles: string[],
   {
@@ -391,49 +389,64 @@ async function analyzeSubtitlesForContext(
     lang: string;
     temperature?: number;
   }
-): Promise<string> {
+): Promise<AnalysisResult> {
   if (apiKeys.length === 0) {
     throw new Error("No valid API keys provided");
   }
   const ai = getAi({ apiKey: apiKeys[0], apiHost });
 
-  //   tool calling (some providers are more reliable with tools)
-  try {
-    const result = await generateText({
-      model: ai(model),
-      temperature,
-      system: `# System Prompt
+  const { object } = await generateObject({
+    model: ai(model),
+    temperature,
+    schema: analysisSchema,
+    system: `You are a subtitle content analyst for a translation system.
+Analyze the provided subtitle sample and return:
+1. plotSummary: A ${lang} narrative (5–10 sentences) describing what happens. Write naturally, not as a literal stitch of subtitles.
+2. glossary: Up to 30 entries for character names, places, organizations, jargon, or fictional terms. For each, provide the term as it appears and its preferred ${lang} translation or rendering. If no translation exists, repeat the original term.`,
+    prompt: `Analyze this subtitle sample:\n\n` + subtitles.join("\n"),
+    maxRetries: 2,
+  });
 
-You are a subtitle content analyst assisting a translation and glossary extraction system.
-
-## Task
-Analyze subtitle samples and return two outputs:
-1. **Plot Summary**
-   - Language: ${lang}
-   - Length: 5–10 sentences
-   - Must be clear, coherent, and written in natural ${lang}
-   - Avoid literal stitching of subtitles
-
-2. **Glossary**
-   - Up to 50 items
-   - Include rare words, character names, places, organizations, fictional elements, or jargon
-   - Each entry must follow the schema:
-     - term (required)
-     - description (required)
-     - category (optional: person, place, organization, jargon, fictional, other)
-     - preferredTranslation (optional)
-     - notes (optional)  `,
-      prompt:
-        `Produce plot summary in ${lang} and glossary from this sample:\n` +
-        subtitles.join("\n"),
-      maxRetries: 2,
-    });
-    return deduplicateLines(result.text);
-  } catch (e) {
-    return "";
-  }
+  return object;
 }
 
+async function synthesizePlotSummaries(
+  summaries: string[],
+  {
+    apiKeys,
+    apiHost,
+    model,
+    lang,
+    temperature = 0.3,
+  }: {
+    apiKeys: string[];
+    apiHost: string;
+    model: string;
+    lang: string;
+    temperature?: number;
+  }
+): Promise<string> {
+  if (apiKeys.length === 0 || summaries.length === 0) {
+    return summaries.join("\n\n");
+  }
+  const ai = getAi({ apiKey: apiKeys[0], apiHost });
+
+  const numbered = summaries
+    .map((s, i) => `[Part ${i + 1}]\n${s}`)
+    .join("\n\n");
+
+  const result = await generateText({
+    model: ai(model),
+    temperature,
+    system: `You are a plot summarizer. Combine the provided partial summaries into one coherent ${lang} narrative. Preserve chronological order. Do not introduce information not present in the parts.`,
+    prompt: `Synthesize these partial summaries into one coherent summary:\n\n${numbered}`,
+    maxRetries: 2,
+  });
+
+  return result.text;
+}
+
+export type { AnalysisResult };
 export {
   translateSubtitleChunk,
   translateSubtitleSingle,
@@ -441,4 +454,5 @@ export {
   saveTranslated,
   splitIntoChunk,
   analyzeSubtitlesForContext,
+  synthesizePlotSummaries,
 };
