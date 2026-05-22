@@ -179,7 +179,8 @@ function formatAnalysisContext(analysis: AnalysisResult): string {
   const glossaryLines = analysis.glossary
     .map((g) => `- ${g.term}: ${g.translation}`)
     .join("\n");
-  return `[Context]\n## Plot Summary\n${analysis.plotSummary}\n## Glossary\n${glossaryLines}`;
+  const glossarySection = glossaryLines ? `\n## Glossary\n${glossaryLines}` : "";
+  return `[Context]\n## Plot Summary\n${analysis.plotSummary}${glossarySection}`;
 }
 
 function isLocalModel(apiHost: string): boolean {
