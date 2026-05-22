@@ -5,6 +5,7 @@ import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
 import pool from "tiny-async-pool";
+import type { AnalysisResult } from "./utils/translate";
 import {
   splitIntoChunk,
   parseSubtitle,
@@ -12,15 +13,8 @@ import {
   translateSubtitleSingle,
   saveTranslated,
   analyzeSubtitlesForContext,
-  type AnalysisResult,
+  synthesizePlotSummaries,
 } from "./utils/translate";
-
-function analysisResultToString(result: AnalysisResult): string {
-  const glossaryLines = result.glossary
-    .map((g) => `${g.term} → ${g.translation}`)
-    .join("\n");
-  return `Plot Summary:\n${result.plotSummary}${glossaryLines ? `\n\nGlossary:\n${glossaryLines}` : ""}`;
-}
 
 function makeKey(start: any, end: any): string {
   const norm = (v: any) =>
@@ -160,6 +154,36 @@ const analysisCache = new Map<string, any>();
 
 function hashContent(content: string): string {
   return crypto.createHash("sha256").update(content).digest("hex");
+}
+
+const ANALYSIS_SECTIONS = 3;
+
+function mergeGlossaries(
+  glossaries: Array<Array<{ term: string; translation: string }>>
+): Array<{ term: string; translation: string }> {
+  const seen = new Set<string>();
+  const merged: Array<{ term: string; translation: string }> = [];
+  for (const glossary of glossaries) {
+    for (const entry of glossary) {
+      const key = entry.term.toLowerCase();
+      if (!seen.has(key)) {
+        seen.add(key);
+        merged.push(entry);
+      }
+    }
+  }
+  return merged;
+}
+
+function formatAnalysisContext(analysis: AnalysisResult): string {
+  const glossaryLines = analysis.glossary
+    .map((g) => `- ${g.term}: ${g.translation}`)
+    .join("\n");
+  return `[Context]\n## Plot Summary\n${analysis.plotSummary}\n## Glossary\n${glossaryLines}`;
+}
+
+function isLocalModel(apiHost: string): boolean {
+  return /localhost|127\.0\.0\.1|0\.0\.0\.0|::1/.test(apiHost);
 }
 
 ipcMain.handle("check-analysis-cache", async (_, filePaths: string[]) => {
@@ -310,55 +334,99 @@ ipcMain.handle("batch-translate", async (event, { files, params }) => {
 
       let combinedAdditional = params.additional || "";
       let analysisData: AnalysisResult | null = null;
+
       try {
-        let analysisResult: AnalysisResult | null = null;
         let usedCache = false;
+
         if (!params.forceReanalyze && fs.existsSync(cacheFile)) {
           try {
             const cached = JSON.parse(fs.readFileSync(cacheFile, "utf8"));
-            if (cached.contentHash === fileHash && cached.analysis) {
-              analysisResult = cached.analysis;
+            if (
+              cached.contentHash === fileHash &&
+              cached.analysis &&
+              typeof cached.analysis === "object"
+            ) {
+              analysisData = cached.analysis as AnalysisResult;
               usedCache = true;
             }
           } catch {}
         }
+
         if (!usedCache) {
-          analysisResult = await analyzeSubtitlesForContext(allTexts, {
-            apiKeys: params.apiKeys || [],
-            apiHost: params.apiHost || "https://api.openai.com/v1",
-            model: params.model || "",
-            lang: params.lang || "",
-            temperature: 0.3,
-          });
-          try {
-            fs.writeFileSync(
-              cacheFile,
-              JSON.stringify({ contentHash: fileHash, analysis: analysisResult }),
-              "utf8"
+          const sectionSize = Math.ceil(allTexts.length / ANALYSIS_SECTIONS);
+          const sections = Array.from({ length: ANALYSIS_SECTIONS }, (_, i) =>
+            allTexts.slice(i * sectionSize, (i + 1) * sectionSize)
+          ).filter((s) => s.length > 0);
+
+          const sectionResults = await Promise.all(
+            sections.map((section) =>
+              analyzeSubtitlesForContext(section, {
+                apiKeys: params.apiKeys || [],
+                apiHost: params.apiHost || "https://api.openai.com/v1",
+                model: params.model || "",
+                lang: params.lang || "",
+                temperature: 0.3,
+              }).catch(() => null)
+            )
+          );
+
+          const validResults = sectionResults.filter(
+            (r): r is AnalysisResult => r !== null
+          );
+
+          if (validResults.length > 0) {
+            const mergedGlossary = mergeGlossaries(
+              validResults.map((r) => r.glossary)
             );
-          } catch {}
+            const summaries = validResults.map((r) => r.plotSummary);
+
+            let plotSummary: string;
+            if (summaries.length === 1) {
+              plotSummary = summaries[0];
+            } else {
+              try {
+                plotSummary = await synthesizePlotSummaries(summaries, {
+                  apiKeys: params.apiKeys || [],
+                  apiHost: params.apiHost || "https://api.openai.com/v1",
+                  model: params.model || "",
+                  lang: params.lang || "",
+                  temperature: 0.3,
+                });
+              } catch {
+                plotSummary = summaries
+                  .map((s, i) => `[Act ${i + 1}]\n${s}`)
+                  .join("\n\n");
+              }
+            }
+
+            analysisData = { plotSummary, glossary: mergedGlossary };
+
+            try {
+              fs.writeFileSync(
+                cacheFile,
+                JSON.stringify({ contentHash: fileHash, analysis: analysisData }),
+                "utf8"
+              );
+            } catch {}
+          }
         }
-        if (analysisResult) {
-          const analysisText = analysisResultToString(analysisResult);
+
+        if (analysisData) {
           combinedAdditional = `${
             combinedAdditional ? combinedAdditional + "\n\n" : ""
-          }[Context]\n${analysisText}`;
-          analysisData = analysisResult;
-          analysisCache.set(file.path, analysisResult);
+          }${formatAnalysisContext(analysisData)}`;
+          analysisCache.set(file.path, analysisData);
           event.sender.send("batch-progress", {
             filePath: file.path,
             progress: 4,
             status: "analyzing",
             totalCues,
             currentCue: 0,
-            analysis: analysisResult,
+            analysis: analysisData,
           });
         }
       } catch (analysisErr) {
-        console.warn(
-          "Context analysis failed, continue without it:",
-          analysisErr
-        );
+        console.warn("Context analysis failed, continue without it:", analysisErr);
       }
 
       event.sender.send("batch-progress", {
