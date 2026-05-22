@@ -21,6 +21,14 @@ function NavItem({ to, icon }: { to: string; icon: string }) {
     </Link>
   );
 }
+function isNewerVersion(remote: string, local: string): boolean {
+  const parse = (v: string) => v.replace(/^v/, "").split(".").map(Number);
+  const [ra, rb, rc] = parse(remote);
+  const [la, lb, lc] = parse(local);
+  if (ra !== la) return ra > la;
+  if (rb !== lb) return rb > lb;
+  return rc > lc;
+}
 function CheckUpdate() {
   const version = useVersion();
   const [newVersion, setNewVersion] = useState<string | null>(null);
@@ -34,7 +42,7 @@ function CheckUpdate() {
       });
   }, []);
   useEffect(() => {
-    if (version && newVersion && version != newVersion) {
+    if (version && newVersion && isNewerVersion(newVersion, version)) {
       toast.info(`New version (${newVersion})`, {
         onClick: () => {
           shell.openExternal(
@@ -48,7 +56,7 @@ function CheckUpdate() {
     }
   }, [version, newVersion]);
 
-  if (version && newVersion && version != newVersion) {
+  if (version && newVersion && isNewerVersion(newVersion, version)) {
     return (
       <a
         href="https://github.com/gnehs/subtitle-translator-electron/releases/latest"
