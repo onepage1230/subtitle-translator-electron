@@ -602,7 +602,13 @@ ipcMain.handle("batch-translate", async (event, { files, params }) => {
         }
       };
 
-      for await (const _ of pool(10, chunks, chunkProcessor)) {
+      const defaultConcurrency = isLocalModel(params.apiHost || "") ? 3 : 10;
+      const concurrency =
+        typeof params.concurrentRequests === "number"
+          ? Math.max(1, Math.min(20, params.concurrentRequests))
+          : defaultConcurrency;
+
+      for await (const _ of pool(concurrency, chunks, chunkProcessor)) {
         // Process chunks in parallel
       }
 
