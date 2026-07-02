@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import crypto from "node:crypto";
-import type { AnalysisResult } from "./translate";
+import type { AnalysisResult, GlossaryEntry } from "./translate";
 import { analyzeSubtitlesForContext, synthesizePlotSummaries } from "./translate";
 
 function hashContent(content: string): string {
@@ -10,10 +10,10 @@ function hashContent(content: string): string {
 const ANALYSIS_SECTIONS = 3;
 
 function mergeGlossaries(
-  glossaries: Array<Array<{ term: string; translation: string }>>
-): Array<{ term: string; translation: string }> {
+  glossaries: Array<GlossaryEntry[]>
+): GlossaryEntry[] {
   const seen = new Set<string>();
-  const merged: Array<{ term: string; translation: string }> = [];
+  const merged: GlossaryEntry[] = [];
   for (const glossary of glossaries) {
     for (const entry of glossary) {
       const key = entry.term.toLowerCase();
@@ -50,6 +50,12 @@ function readAnalysisCache(
       cached.analysis &&
       typeof cached.analysis === "object"
     ) {
+      if (Array.isArray(cached.analysis.glossary)) {
+        cached.analysis.glossary = cached.analysis.glossary.map((g: any) => ({
+          ...g,
+          category: g.category ?? "term",
+        }));
+      }
       return cached.analysis as AnalysisResult;
     }
   } catch {}
@@ -62,8 +68,9 @@ async function getOrCreateAnalysis(opts: {
   contentHash: string;
   forceReanalyze: boolean;
   params: { apiKeys: string[]; apiHost: string; model: string; lang: string };
+  existingGlossary?: GlossaryEntry[];
 }): Promise<AnalysisResult | null> {
-  const { texts, cacheFile, contentHash, forceReanalyze, params } = opts;
+  const { texts, cacheFile, contentHash, forceReanalyze, params, existingGlossary } = opts;
 
   if (!forceReanalyze) {
     const cached = readAnalysisCache(cacheFile, contentHash);
@@ -83,6 +90,7 @@ async function getOrCreateAnalysis(opts: {
         model: params.model,
         lang: params.lang,
         temperature: 0.3,
+        existingGlossary,
       }).catch(() => null)
     )
   );

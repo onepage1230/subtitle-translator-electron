@@ -53,7 +53,7 @@ function resetMocks() {
   vi.mocked(translate.analyzeSubtitlesForContext).mockReset()
     .mockResolvedValue({
       plotSummary: "part-summary",
-      glossary: [{ term: "Hello", translation: "哈囉" }],
+      glossary: [{ term: "Hello", translation: "哈囉", category: "term" }],
     } as any);
   vi.mocked(translate.synthesizePlotSummaries).mockReset()
     .mockResolvedValue("combined-summary");

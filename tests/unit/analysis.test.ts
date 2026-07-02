@@ -29,7 +29,7 @@ function tmpCacheFile(): string {
 beforeEach(() => {
   vi.mocked(translate.analyzeSubtitlesForContext).mockReset().mockResolvedValue({
     plotSummary: "part",
-    glossary: [{ term: "Neo", translation: "尼歐" }],
+    glossary: [{ term: "Neo", translation: "尼歐", category: "person" }],
   } as any);
   vi.mocked(translate.synthesizePlotSummaries).mockReset().mockResolvedValue("synth");
 });
@@ -37,12 +37,15 @@ beforeEach(() => {
 describe("mergeGlossaries", () => {
   it("dedupes case-insensitively, first wins", () => {
     const merged = mergeGlossaries([
-      [{ term: "Neo", translation: "尼歐" }],
-      [{ term: "neo", translation: "紐" }, { term: "Trinity", translation: "崔妮蒂" }],
+      [{ term: "Neo", translation: "尼歐", category: "person" }],
+      [
+        { term: "neo", translation: "紐", category: "person" },
+        { term: "Trinity", translation: "崔妮蒂", category: "person" },
+      ],
     ]);
     expect(merged).toEqual([
-      { term: "Neo", translation: "尼歐" },
-      { term: "Trinity", translation: "崔妮蒂" },
+      { term: "Neo", translation: "尼歐", category: "person" },
+      { term: "Trinity", translation: "崔妮蒂", category: "person" },
     ]);
   });
 });
@@ -110,5 +113,27 @@ describe("getOrCreateAnalysis", () => {
       forceReanalyze: false, params: PARAMS,
     });
     expect(r!.plotSummary).toBe("part"); // 1 段 → 不經 synthesize
+  });
+
+  it("fills missing category as 'term' when reading legacy cache", () => {
+    const cacheFile = tmpCacheFile();
+    const hash = hashContent("c");
+    fs.writeFileSync(cacheFile, JSON.stringify({
+      contentHash: hash,
+      analysis: { plotSummary: "p", glossary: [{ term: "Neo", translation: "尼歐" }] },
+    }));
+    const r = readAnalysisCache(cacheFile, hash);
+    expect(r!.glossary[0].category).toBe("term");
+  });
+
+  it("passes existingGlossary through to every section analysis", async () => {
+    const existing = [{ term: "Neo", translation: "尼歐", category: "person" as const }];
+    await getOrCreateAnalysis({
+      texts: ["a", "b", "c"], cacheFile: tmpCacheFile(), contentHash: "h",
+      forceReanalyze: false, params: PARAMS, existingGlossary: existing,
+    });
+    for (const call of vi.mocked(translate.analyzeSubtitlesForContext).mock.calls) {
+      expect(call[1].existingGlossary).toEqual(existing);
+    }
   });
 });

@@ -26,7 +26,10 @@ interface ProgressType {
   error?: string;
   totalCues?: number;
   currentCue?: number;
-  analysis?: { plotSummary: string; glossary: Array<{ term: string; translation: string }> };
+  analysis?: {
+    plotSummary: string;
+    glossary: Array<{ term: string; translation: string; category?: string }>;
+  };
   failedCues?: number;
   failedKeys?: string[];
 }

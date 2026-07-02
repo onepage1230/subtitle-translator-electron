@@ -2,17 +2,22 @@ import { z } from "zod";
 import { generateObject, generateText, tool } from "ai";
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 
+const glossaryCategorySchema = z.enum(["person", "place", "organization", "term"]);
+
+const glossaryEntrySchema = z.object({
+  term: z.string(),
+  translation: z.string(),
+  category: glossaryCategorySchema,
+});
+
 const analysisSchema = z.object({
   plotSummary: z.string(),
-  glossary: z.array(
-    z.object({
-      term: z.string(),
-      translation: z.string(),
-    })
-  ),
+  glossary: z.array(glossaryEntrySchema),
 });
 
 type AnalysisResult = z.infer<typeof analysisSchema>;
+type GlossaryCategory = z.infer<typeof glossaryCategorySchema>;
+type GlossaryEntry = z.infer<typeof glossaryEntrySchema>;
 
 function getAi({ apiKey, apiHost }: { apiKey: string; apiHost: string }) {
   return createOpenAICompatible({
@@ -243,18 +248,27 @@ async function analyzeSubtitlesForContext(
     model,
     lang,
     temperature = 0.3,
+    existingGlossary,
   }: {
     apiKeys: string[];
     apiHost: string;
     model: string;
     lang: string;
     temperature?: number;
+    existingGlossary?: GlossaryEntry[];
   }
 ): Promise<AnalysisResult> {
   if (apiKeys.length === 0) {
     throw new Error("No valid API keys provided");
   }
   const ai = getAi({ apiKey: apiKeys[0], apiHost });
+
+  const existingSection =
+    existingGlossary && existingGlossary.length > 0
+      ? `\n\nAn established glossary already exists for this series. You MUST reuse these exact translations whenever these terms appear. Do NOT repeat them in your glossary output:\n${existingGlossary
+          .map((g) => `- ${g.term}: ${g.translation}`)
+          .join("\n")}`
+      : "";
 
   const { object } = await generateObject({
     model: ai(model),
@@ -263,7 +277,7 @@ async function analyzeSubtitlesForContext(
     system: `You are a subtitle content analyst for a translation system.
 Analyze the provided subtitle sample and return:
 1. plotSummary: A ${lang} narrative (5–10 sentences) describing what happens. Write naturally, not as a literal stitch of subtitles.
-2. glossary: Up to 30 entries for character names, places, organizations, jargon, or fictional terms. For each, provide the term as it appears and its preferred ${lang} translation or rendering. If no translation exists, repeat the original term.`,
+2. glossary: Up to 15 entries of proper nouns ONLY — person names (category "person"), place names ("place"), organization or group names ("organization"), and titles, fictional terms or domain-specific jargon ("term"). Do NOT include common nouns, everyday vocabulary, or full sentences. For each entry provide the term as it appears, its preferred ${lang} translation or rendering (repeat the original term if no translation exists), and its category.${existingSection}`,
     prompt: `Analyze this subtitle sample:\n\n` + subtitles.join("\n"),
     maxRetries: 2,
   });
@@ -307,7 +321,7 @@ async function synthesizePlotSummaries(
   return result.text;
 }
 
-export type { AnalysisResult };
+export type { AnalysisResult, GlossaryCategory, GlossaryEntry };
 export {
   translateSubtitleChunk,
   translateSubtitleSingle,
