@@ -35,11 +35,11 @@ electron/main/
   utils/
     translate.ts      — 維持現狀：AI 呼叫層（chunk / single / analyze / synthesize）
     subtitle.ts       — parseSubtitle、saveTranslated、splitIntoChunk、normalizeCues
-    retry.ts          — retryTranslate（含可重試錯誤判斷）
     analysis.ts       — 分析協調：分段平行分析、mergeGlossaries、formatAnalysisContext、
                         hashContent、.analysis.json 快取讀寫
     pipeline.ts       — translateFile(file, params, onProgress)：resume 預填、
-                        上下文視窗 chunk 翻譯、逐行 fallback、失敗標記、部分寫檔
+                        上下文視窗 chunk 翻譯、逐行 fallback、失敗標記、部分寫檔、
+                        retryTranslate（含可重試錯誤判斷；只被 pipeline 使用，不另開模組）
 shared/
   subtitleKey.ts      — makeKey 單一來源，main 與 renderer 共用
 ```
@@ -68,6 +68,10 @@ shared/
 
 ### 測試（引入 vitest）
 
+- **特徵測試先行**：重構前先對現有 `batch-translate` handler 的 `batch-progress`
+  事件序列（status 轉換、progress 區間、payload 欄位）建立特徵測試
+  （characterization test），重構後必須通過同一組測試——
+  「payload 維持相容」以此驗證，不靠宣告。
 - 純函式單元測試：`splitIntoChunk`（含跳過已翻譯行）、`parseNumberedList`、
   `mergeGlossaries`（大小寫去重、先到者勝）、`formatAnalysisContext`（空 glossary 省略）、
   `makeKey`（數字四捨五入、字串 trim）、`retryTranslate`（fake timers 驗證
@@ -94,8 +98,7 @@ shared/
 
   ```json
   {
-    "terms": [{ "term": "...", "translation": "..." }],
-    "updatedAt": "2026-07-02T00:00:00.000Z"
+    "terms": [{ "term": "...", "translation": "...", "category": "person" }]
   }
   ```
 
@@ -107,7 +110,22 @@ shared/
   同 term（不分大小寫）以先到者勝——寫回 `.series-glossary.json`。
 - **plot summary 維持單集**，不跨集共用。
 - **`forceReanalyze`** 只重建該集的 `.analysis.json` 快取；series glossary 照常累積，
-  既有 term 不被覆蓋。
+  既有 term 不被覆蓋。若累積的譯名有誤，重置方式為**刪除
+  `.series-glossary.json`**——這是明文支援的操作，下次翻譯會重建。
+
+### 詞彙表准入條件與上限
+
+- **准入條件（結構化強制）**：`analysisSchema` 的 glossary entry 增加
+  `category` 欄位，enum：`person`（人名）、`place`（地名）、
+  `organization`（組織／團體）、`term`（稱號、虛構名詞、專業術語）。
+  分析 prompt 明確指示：只收專有名詞——人名、地名、組織名、稱號、
+  作品內虛構或專業術語；**排除一般名詞、常用詞、日常短語與完整句子**。
+  模型必須為每條詞彙分類，schema 驗證失敗或無法歸入四類者不得進入詞彙表。
+- **上限 100 條**：series glossary 儲存與注入均以 100 條為上限，
+  超過時依 category 優先序 `person > organization > place > term` 裁剪，
+  同序內先到者勝。此上限同時防止長劇追番情境下 prompt 無限膨脹。
+- **舊快取相容**：既有 `.analysis.json` 快取的 glossary entry 缺 `category`
+  欄位者一律視為 `term`，快取不作廢。
 
 ### 處理順序調整
 
@@ -125,6 +143,8 @@ shared/
 ### 測試
 
 - glossary 合併與回寫的單元測試（先到者勝、大小寫、損毀檔案容錯）。
+- 准入與上限測試：無效 category 被拒收；超過 100 條時依優先序裁剪；
+  缺 category 的舊快取 entry 視為 `term`。
 - 檔名自然排序測試。
 - pipeline 層測試：第二個檔案的分析 prompt 包含第一個檔案產出的詞彙。
 
@@ -154,6 +174,16 @@ shared/
 - **多語存檔限制**：`multiLangSave ≠ none` 時 resume 本來就停用，
   重試按鈕在此情況下不顯示（與現有 resume 行為一致）。
 
+### 測試
+
+本 Phase 依賴「失敗行存檔為原文 + resume 跳過相同文字」這組既有行為的組合，
+必須用測試釘死，防止未來改動默默破壞：
+
+- pipeline 測試：翻譯結果含 `__FAILED__` 行的檔案存檔後，重跑 `translateFile`
+  → 只有失敗行被送去翻譯，已完成行不重譯、內容不變。
+- `saveTranslated` 單元測試：`__FAILED__` 行寫出原文（SRT/VTT 與 ASS 兩條路徑）。
+- resume 單元測試：譯文等於原文的行不被預填為已完成。
+
 ### 已知取捨
 
 - 譯文恰好等於原文的行（數字、專有名詞、「OK」等）會被順便重譯一次，無害。
@@ -167,4 +197,6 @@ shared/
 1. **Phase 1** 先行：Phase 2 依賴 `analysis.ts` 模組邊界，Phase 3 依賴
    `pipeline.ts` 的 `translateFile` 入口。
 2. 每個 Phase 獨立 commit / 可交付，`batch-progress` 事件格式全程維持相容。
-3. 版本規劃：Phase 1 為內部重構（patch），Phase 2、3 為新功能（minor）。
+3. **commit 切分原則**：Phase 1 內的行為變更（`.saa` 修正、fallback 錯誤隔離）
+   與純搬移重構各自獨立 commit，review 時可明確區分「行為改了」與「程式碼搬了」。
+4. 版本規劃：Phase 1 為內部重構（patch），Phase 2、3 為新功能（minor）。
