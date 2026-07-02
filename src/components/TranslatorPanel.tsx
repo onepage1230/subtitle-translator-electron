@@ -13,6 +13,7 @@ import InputField from "@/components/InputField";
 import TextareaField from "@/components/TextareaField";
 import Button from "@/components/Button";
 import { getFilePath } from "@/utils/filePath";
+import { makeKey } from "../../electron/shared/subtitleKey";
 
 interface FileType {
   path: string;
@@ -281,11 +282,6 @@ export default function TranslatorPanel() {
   const failedKeySet = new Set<string>(
     selectedFile ? (batchProgress[selectedFile.path]?.failedKeys || []) : []
   );
-  const makeCueKey = (start: any, end: any): string => {
-    const norm = (v: any) =>
-      typeof v === "number" ? Math.round(v) : String(v).trim();
-    return `${norm(start)}|${norm(end)}`;
-  };
 
   return (
     <div className="w-full h-full flex flex-col">
@@ -530,7 +526,7 @@ export default function TranslatorPanel() {
                   </div>
                 )}
                 {cues.map((cue: any, index: number) => {
-                  const isFailed = failedKeySet.has(makeCueKey(cue.start, cue.end));
+                  const isFailed = failedKeySet.has(makeKey(cue.start, cue.end));
                   return (
                     <div
                       key={index}

@@ -16,7 +16,8 @@
     "build": "node utils/writeVersion.js && tsc && vite build && electron-builder",
     "preview": "vite preview",
     "pree2e": "vite build --mode=test",
-    "e2e": "playwright test"
+    "e2e": "playwright test",
+    "test": "vitest run"
   },
   "devDependencies": {
     "@playwright/test": "^1.55.0",
@@ -36,7 +37,8 @@
     "vite": "^7.1.5",
     "vite-electron-plugin": "^0.8.3",
     "vite-plugin-electron": "^0.29.0",
-    "vite-plugin-electron-renderer": "^0.14.6"
+    "vite-plugin-electron-renderer": "^0.14.6",
+    "vitest": "^4.1.9"
   },
   "engines": {
     "node": "^14.18.0 || >=16.0.0"

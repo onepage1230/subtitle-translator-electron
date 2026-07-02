@@ -15,12 +15,7 @@ import {
   analyzeSubtitlesForContext,
   synthesizePlotSummaries,
 } from "./utils/translate";
-
-function makeKey(start: any, end: any): string {
-  const norm = (v: any) =>
-    typeof v === "number" ? Math.round(v) : String(v).trim();
-  return `${norm(start)}|${norm(end)}`;
-}
+import { makeKey } from "../shared/subtitleKey";
 
 // The built directory structure
 //

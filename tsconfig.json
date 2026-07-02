@@ -31,10 +31,5 @@
     "src",
     "src/types",
     "postcss.config.js"
-  ],
-  "references": [
-    {
-      "path": "./tsconfig.node.json"
-    }
   ]
 }
