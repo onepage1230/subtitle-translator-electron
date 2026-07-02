@@ -50,6 +50,8 @@ renderer 不持有待儲存狀態、不做樂觀更新;所有業務規則(排除
   任何一集的 `.analysis.json` 快取詞彙表想把被刪條目合併回來,都在此被擋下。
 - `saveSeriesGlossary(folder, terms, excluded)` 寫回完整結構;改為回傳成功與否
   (boolean)。pipeline 呼叫點忽略回傳值(唯讀資料夾不擋翻譯,行為不變)。
+- `pipeline.ts` 需把 load 得到的 `excluded` 一路傳遞:merge 時作為第三參數、
+  save 時原樣寫回,確保排除清單不會在翻譯流程中遺失。
 - 新增純函式(供 IPC handler 使用、可單元測試):
   - `editGlossaryTranslation(data, term, translation)`:更新譯名並設
     `userEdited: true`。translation trim 後為空、或 term 找不到(lowercase 比對)
