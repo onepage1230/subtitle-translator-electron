@@ -124,6 +124,11 @@ shared/
 - **上限 100 條**：series glossary 儲存與注入均以 100 條為上限，
   超過時依 category 優先序 `person > organization > place > term` 裁剪，
   同序內先到者勝。此上限同時防止長劇追番情境下 prompt 無限膨脹。
+  依據：一季劇集實際產出約 30–80 條專有名詞（100 條有 1.5–3 倍餘裕）；
+  100 條注入約 1,000–2,000 token，本地小模型（4k–8k context）尚可承受。
+- **單集分析上限同步收緊**：分析 prompt 的每段 glossary 上限由 30 條降為
+  15 條（3 段合計最多 45 條），使「單集貢獻幾十條、全劇累積至 100」
+  的比例合理；加上准入條件後，實際條數會更低。
 - **舊快取相容**：既有 `.analysis.json` 快取的 glossary entry 缺 `category`
   欄位者一律視為 `term`，快取不作廢。
 
