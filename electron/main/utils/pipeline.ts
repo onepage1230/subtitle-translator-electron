@@ -3,10 +3,15 @@ import path from "node:path";
 import pool from "tiny-async-pool";
 import { makeKey } from "../../shared/subtitleKey";
 import type { AnalysisResult } from "./translate";
-import { translateSubtitleChunk, translateSubtitleSingle } from "./translate";
+import { translateSubtitleChunk, translateSubtitleSingle, reconcileGlossary } from "./translate";
 import { splitIntoChunk, parseSubtitle, saveTranslated, normalizeCues } from "./subtitle";
 import { hashContent, analysisCachePath, getOrCreateAnalysis, formatAnalysisContext } from "./analysis";
-import { loadSeriesGlossary, mergeIntoSeriesGlossary, saveSeriesGlossary } from "./seriesGlossary";
+import {
+  loadSeriesGlossary,
+  mergeIntoSeriesGlossary,
+  saveSeriesGlossary,
+  enforceReconciliation,
+} from "./seriesGlossary";
 
 function isLocalModel(apiHost: string): boolean {
   return /localhost|127\.0\.0\.1|0\.0\.0\.0|::1/.test(apiHost);
@@ -177,7 +182,34 @@ export async function translateFile(
         existingGlossary: seriesTerms,
       });
       if (analysisData) {
-        const combinedGlossary = mergeIntoSeriesGlossary(seriesTerms, analysisData.glossary);
+        // 詞彙表調和：讓模型認出同一人物的變體（羅馬拼音差異、全名/簡稱），
+        // enforceReconciliation 確保 LOCKED 譯名不被改、漏項補回、發明項丟棄。
+        // 調和失敗不阻斷翻譯，退回原始詞彙表。
+        let episodeGlossary = analysisData.glossary;
+        const newPersons = episodeGlossary.filter((g) => g.category === "person");
+        const shouldReconcile =
+          newPersons.length > 0 &&
+          (newPersons.length >= 2 ||
+            seriesTerms.some((g) => g.category === "person"));
+        if (shouldReconcile) {
+          try {
+            const reconciled = await reconcileGlossary(episodeGlossary, seriesTerms, {
+              apiKeys: params.apiKeys || [],
+              apiHost: params.apiHost || "https://api.openai.com/v1",
+              model: params.model || "",
+              lang: params.lang || "",
+              temperature: 0.3,
+            });
+            episodeGlossary = enforceReconciliation(
+              reconciled,
+              analysisData.glossary,
+              seriesTerms
+            );
+          } catch (reconcileErr) {
+            console.warn("Glossary reconciliation failed, using raw glossary:", reconcileErr);
+          }
+        }
+        const combinedGlossary = mergeIntoSeriesGlossary(seriesTerms, episodeGlossary);
         saveSeriesGlossary(folder, combinedGlossary);
         // [Context] 與進度事件都使用合併後的完整詞彙表
         analysisData = { plotSummary: analysisData.plotSummary, glossary: combinedGlossary };

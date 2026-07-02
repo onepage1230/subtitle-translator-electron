@@ -321,11 +321,59 @@ async function synthesizePlotSummaries(
   return result.text;
 }
 
+async function reconcileGlossary(
+  newEntries: GlossaryEntry[],
+  lockedEntries: GlossaryEntry[],
+  {
+    apiKeys,
+    apiHost,
+    model,
+    lang,
+    temperature = 0.3,
+  }: {
+    apiKeys: string[];
+    apiHost: string;
+    model: string;
+    lang: string;
+    temperature?: number;
+  }
+): Promise<GlossaryEntry[]> {
+  if (apiKeys.length === 0) {
+    throw new Error("No valid API keys provided");
+  }
+  const ai = getAi({ apiKey: apiKeys[0], apiHost });
+
+  const formatEntries = (entries: GlossaryEntry[]) =>
+    entries.map((g) => `- ${g.term}: ${g.translation} (${g.category})`).join("\n");
+
+  const lockedSection = lockedEntries.length
+    ? `LOCKED entries (translations are final, do NOT change them):\n${formatEntries(lockedEntries)}\n\n`
+    : "";
+
+  const { object } = await generateObject({
+    model: ai(model),
+    temperature,
+    schema: z.object({ glossary: z.array(glossaryEntrySchema) }),
+    system: `You are a glossary reconciler for a subtitle translation system.
+Different surface forms often refer to the same person: romanization variants (e.g. "Baek Hyeon-woo" and "Baek Hyun-woo"), a full name vs. a given name only (e.g. "Hong Hye-in" and "Hyein"), or nicknames.
+Rules:
+1. Never change the translation of a LOCKED entry.
+2. Romanization variants of the same name must share the identical translation.
+3. A given-name-only or nickname form must match the corresponding part of the full name's ${lang} translation.
+4. Return ALL provided entries with corrected translations. Do NOT invent entries that were not provided.`,
+    prompt: `${lockedSection}NEW entries to reconcile:\n${formatEntries(newEntries)}`,
+    maxRetries: 2,
+  });
+
+  return object.glossary;
+}
+
 export type { AnalysisResult, GlossaryCategory, GlossaryEntry };
 export {
   translateSubtitleChunk,
   translateSubtitleSingle,
   analyzeSubtitlesForContext,
   synthesizePlotSummaries,
+  reconcileGlossary,
   parseNumberedList,
 };

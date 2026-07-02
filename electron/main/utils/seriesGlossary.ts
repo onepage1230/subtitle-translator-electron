@@ -51,6 +51,32 @@ export function mergeIntoSeriesGlossary(
     .map(({ entry }) => entry);
 }
 
+// 調和結果的確定性防護：LOCKED 譯名強制還原、模型漏掉的條目補回、
+// 憑空發明的條目丟棄。模型只負責「認出變體」，一致性由這裡保證。
+export function enforceReconciliation(
+  reconciled: GlossaryEntry[],
+  originals: GlossaryEntry[],
+  locked: GlossaryEntry[]
+): GlossaryEntry[] {
+  const lockedMap = new Map(locked.map((e) => [e.term.toLowerCase(), e]));
+  const allowed = new Set([
+    ...originals.map((e) => e.term.toLowerCase()),
+    ...lockedMap.keys(),
+  ]);
+  const seen = new Set<string>();
+  const result: GlossaryEntry[] = [];
+  const push = (entry: GlossaryEntry) => {
+    const key = entry.term.toLowerCase();
+    if (!allowed.has(key) || seen.has(key)) return;
+    seen.add(key);
+    const lockedEntry = lockedMap.get(key);
+    result.push(lockedEntry ? { ...lockedEntry } : entry);
+  };
+  for (const entry of reconciled) push(entry);
+  for (const entry of originals) push(entry); // 模型漏掉的原始條目補回
+  return result;
+}
+
 export function saveSeriesGlossary(folder: string, terms: GlossaryEntry[]): void {
   try {
     fs.writeFileSync(

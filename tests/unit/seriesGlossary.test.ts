@@ -6,6 +6,7 @@ import {
   loadSeriesGlossary,
   mergeIntoSeriesGlossary,
   saveSeriesGlossary,
+  enforceReconciliation,
   SERIES_GLOSSARY_FILE,
   SERIES_GLOSSARY_CAP,
 } from "../../electron/main/utils/seriesGlossary";
@@ -73,5 +74,53 @@ describe("load/save", () => {
       JSON.stringify({ terms: [{ term: "Neo", translation: "尼歐" }] })
     );
     expect(loadSeriesGlossary(folder)[0].category).toBe("term");
+  });
+});
+
+describe("enforceReconciliation", () => {
+  const p = (term: string, translation: string) => ({
+    term,
+    translation,
+    category: "person" as const,
+  });
+
+  it("restores locked translations the model tried to change", () => {
+    const locked = [p("Baek Hyeon-woo", "白賢祐")];
+    const originals = [p("Baek Hyun-woo", "白賢宇")];
+    const reconciled = [
+      p("Baek Hyeon-woo", "白某某"), // 模型違規改了 LOCKED
+      p("Baek Hyun-woo", "白賢祐"), // 模型正確調和了變體
+    ];
+    const result = enforceReconciliation(reconciled, originals, locked);
+    expect(result).toContainEqual(p("Baek Hyeon-woo", "白賢祐"));
+    expect(result).toContainEqual(p("Baek Hyun-woo", "白賢祐"));
+  });
+
+  it("re-adds entries the model dropped", () => {
+    const originals = [p("Hong Hye-in", "洪惠仁"), p("Hyein", "惠仁")];
+    const reconciled = [p("Hong Hye-in", "洪惠仁")]; // 模型漏了 Hyein
+    const result = enforceReconciliation(reconciled, originals, []);
+    expect(result).toContainEqual(p("Hyein", "惠仁"));
+    expect(result).toHaveLength(2);
+  });
+
+  it("drops entries the model invented", () => {
+    const originals = [p("Neo", "尼歐")];
+    const reconciled = [p("Neo", "尼歐"), p("Morpheus", "莫菲斯")]; // 憑空多了一條
+    const result = enforceReconciliation(reconciled, originals, []);
+    expect(result.map((e) => e.term)).toEqual(["Neo"]);
+  });
+
+  it("keeps model corrections on new entries and dedupes case-insensitively", () => {
+    const locked = [p("Hong Hye-in", "洪惠仁")];
+    const originals = [p("hyein", "海仁")];
+    const reconciled = [
+      p("Hong Hye-in", "洪惠仁"),
+      p("hyein", "惠仁"),
+      p("Hyein", "惠仁"), // 大小寫重複
+    ];
+    const result = enforceReconciliation(reconciled, originals, locked);
+    expect(result).toHaveLength(2);
+    expect(result).toContainEqual(p("hyein", "惠仁"));
   });
 });
