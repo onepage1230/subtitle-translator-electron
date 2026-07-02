@@ -113,7 +113,8 @@ electron/main/
 - **plot summary 維持單集**，不跨集共用。
 - **`forceReanalyze`** 只重建該集的 `.analysis.json` 快取；series glossary 照常累積，
   既有 term 不被覆蓋。若累積的譯名有誤，重置方式為**刪除
-  `.series-glossary.json`**——這是明文支援的操作，下次翻譯會重建。
+  `.series-glossary.json`**——這是明文支援的操作，下次翻譯會重建。重置需同時重新分析
+  （或刪除各集 `.analysis.json` 快取），否則快取會使舊譯名重新累積。
 
 ### 詞彙表准入條件與上限
 

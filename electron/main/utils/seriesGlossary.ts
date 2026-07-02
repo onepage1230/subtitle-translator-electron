@@ -33,7 +33,7 @@ export function mergeIntoSeriesGlossary(
   const seen = new Set<string>();
   const merged: GlossaryEntry[] = [];
   for (const entry of [...existing, ...incoming]) {
-    if (!(entry.category in CATEGORY_PRIORITY)) continue; // 准入過濾
+    if (!Object.hasOwn(CATEGORY_PRIORITY, entry.category)) continue; // 准入過濾
     const key = entry.term.toLowerCase();
     if (seen.has(key)) continue; // 先到者勝
     seen.add(key);

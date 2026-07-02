@@ -26,7 +26,7 @@ No lint script is defined; TypeScript type checking is done via `tsc` during bui
 This is an **Electron + React** desktop app built with Vite. The two distinct runtime contexts are:
 
 ### Electron Main Process (`electron/main/`)
-- **`index.ts`** — thin BrowserWindow setup + IPC handlers: `batch-translate`, `get-analysis`, `get-translated-content`, `get-subtitle-preview`; delegates the actual work to the four modules below
+- **`index.ts`** — thin BrowserWindow setup + IPC handlers: `batch-translate`, `get-analysis`, `get-translated-content`, `get-subtitle-preview`, `check-analysis-cache`, `retry-file`; delegates the actual work to the four modules below
 - **`utils/translate.ts`** — AI calls only: Vercel AI SDK (`@ai-sdk/openai-compatible`) chunk/single-line translation, tool-calling with `generateObject` JSON schema fallback
 - **`utils/subtitle.ts`** — subtitle parsing/serialization: `parseSubtitle` (SRT/VTT/ASS/SSA), `saveTranslated` (atomic `.tmp` rename writes), `normalizeCues`, `splitIntoChunk`
 - **`utils/analysis.ts`** — context analysis orchestration and caching: `getOrCreateAnalysis`, `hashContent`, `analysisCachePath`, `formatAnalysisContext`
@@ -59,7 +59,7 @@ Series mode: subtitle files in the same folder share an accumulated glossary
 (`.series-glossary.json`, first-wins, capped at 100 entries by category priority
 person > organization > place > term). Files in the same folder are processed
 sequentially (natural filename order); different folders run in parallel.
-Delete the JSON file to reset the series glossary.
+To reset the series glossary, delete `.series-glossary.json` AND re-analyze the episodes (the reanalyze dialog, or delete the per-file `.analysis.json` caches) — otherwise cached per-episode analyses will repopulate the old terms on the next run.
 
 ### Settings Persistence
 All user settings use `localStorage` keys:
