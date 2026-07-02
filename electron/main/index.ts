@@ -5,7 +5,8 @@ import fs from "node:fs";
 import path from "node:path";
 import pool from "tiny-async-pool";
 import { parseSubtitle, normalizeCues } from "./utils/subtitle";
-import { translateFile, hashContent } from "./utils/pipeline";
+import { translateFile } from "./utils/pipeline";
+import { readAnalysisCache, analysisCachePath, hashContent } from "./utils/analysis";
 import { makeKey } from "../shared/subtitleKey";
 
 // The built directory structure
@@ -141,14 +142,9 @@ const analysisCache = new Map<string, any>();
 ipcMain.handle("check-analysis-cache", async (_, filePaths: string[]) => {
   const cached: string[] = [];
   for (const filePath of filePaths) {
-    const cacheFile = filePath.replace(/\.[^/.]+$/, "") + ".analysis.json";
-    if (!fs.existsSync(cacheFile)) continue;
     try {
-      const { contentHash, analysis } = JSON.parse(
-        fs.readFileSync(cacheFile, "utf8")
-      );
       const fileContent = fs.readFileSync(filePath, "utf8");
-      if (contentHash === hashContent(fileContent) && analysis) {
+      if (readAnalysisCache(analysisCachePath(filePath), hashContent(fileContent))) {
         cached.push(filePath);
       }
     } catch {}

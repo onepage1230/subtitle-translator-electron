@@ -1,47 +1,11 @@
 import fs from "node:fs";
 import path from "node:path";
-import crypto from "node:crypto";
 import pool from "tiny-async-pool";
 import { makeKey } from "../../shared/subtitleKey";
 import type { AnalysisResult } from "./translate";
-import {
-  translateSubtitleChunk,
-  translateSubtitleSingle,
-  analyzeSubtitlesForContext,
-  synthesizePlotSummaries,
-} from "./translate";
+import { translateSubtitleChunk, translateSubtitleSingle } from "./translate";
 import { splitIntoChunk, parseSubtitle, saveTranslated, normalizeCues } from "./subtitle";
-
-function hashContent(content: string): string {
-  return crypto.createHash("sha256").update(content).digest("hex");
-}
-
-const ANALYSIS_SECTIONS = 3;
-
-function mergeGlossaries(
-  glossaries: Array<Array<{ term: string; translation: string }>>
-): Array<{ term: string; translation: string }> {
-  const seen = new Set<string>();
-  const merged: Array<{ term: string; translation: string }> = [];
-  for (const glossary of glossaries) {
-    for (const entry of glossary) {
-      const key = entry.term.toLowerCase();
-      if (!seen.has(key)) {
-        seen.add(key);
-        merged.push(entry);
-      }
-    }
-  }
-  return merged;
-}
-
-function formatAnalysisContext(analysis: AnalysisResult): string {
-  const glossaryLines = analysis.glossary
-    .map((g) => `- ${g.term}: ${g.translation}`)
-    .join("\n");
-  const glossarySection = glossaryLines ? `\n## Glossary\n${glossaryLines}` : "";
-  return `[Context]\n## Plot Summary\n${analysis.plotSummary}${glossarySection}`;
-}
+import { hashContent, analysisCachePath, getOrCreateAnalysis, formatAnalysisContext } from "./analysis";
 
 function isLocalModel(apiHost: string): boolean {
   return /localhost|127\.0\.0\.1|0\.0\.0\.0|::1/.test(apiHost);
@@ -136,7 +100,7 @@ export async function translateFile(
     const ext = path.extname(file.path).slice(1).toLowerCase();
     const content = fs.readFileSync(file.path, "utf8");
     const fileHash = hashContent(content);
-    const cacheFile = file.path.replace(/\.[^/.]+$/, "") + ".analysis.json";
+    const cacheFile = analysisCachePath(file.path);
     let parsed = parseSubtitle(content, ext);
     const subtitle = normalizeCues(parsed);
     const totalCues = subtitle.length;
@@ -195,93 +159,21 @@ export async function translateFile(
     let analysisData: AnalysisResult | null = null;
 
     try {
-      let usedCache = false;
-
-      if (!params.forceReanalyze && fs.existsSync(cacheFile)) {
-        try {
-          const cached = JSON.parse(fs.readFileSync(cacheFile, "utf8"));
-          if (
-            cached.contentHash === fileHash &&
-            cached.analysis &&
-            typeof cached.analysis === "object"
-          ) {
-            analysisData = cached.analysis as AnalysisResult;
-            usedCache = true;
-          }
-        } catch {}
-      }
-
-      if (!usedCache) {
-        const sectionSize = Math.ceil(allTexts.length / ANALYSIS_SECTIONS);
-        const sections = Array.from({ length: ANALYSIS_SECTIONS }, (_, i) =>
-          allTexts.slice(i * sectionSize, (i + 1) * sectionSize)
-        ).filter((s) => s.length > 0);
-
-        const sectionResults = await Promise.all(
-          sections.map((section) =>
-            analyzeSubtitlesForContext(section, {
-              apiKeys: params.apiKeys || [],
-              apiHost: params.apiHost || "https://api.openai.com/v1",
-              model: params.model || "",
-              lang: params.lang || "",
-              temperature: 0.3,
-            }).catch(() => null)
-          )
-        );
-
-        const validResults = sectionResults.filter(
-          (r): r is AnalysisResult => r !== null
-        );
-
-        if (validResults.length > 0) {
-          const mergedGlossary = mergeGlossaries(
-            validResults.map((r) => r.glossary)
-          );
-          const summaries = validResults.map((r) => r.plotSummary);
-
-          let plotSummary: string;
-          if (summaries.length === 1) {
-            plotSummary = summaries[0];
-          } else {
-            try {
-              plotSummary = await synthesizePlotSummaries(summaries, {
-                apiKeys: params.apiKeys || [],
-                apiHost: params.apiHost || "https://api.openai.com/v1",
-                model: params.model || "",
-                lang: params.lang || "",
-                temperature: 0.3,
-              });
-            } catch {
-              plotSummary = summaries
-                .map((s, i) => `[Act ${i + 1}]\n${s}`)
-                .join("\n\n");
-            }
-          }
-
-          analysisData = { plotSummary, glossary: mergedGlossary };
-
-          try {
-            fs.writeFileSync(
-              cacheFile,
-              JSON.stringify({ contentHash: fileHash, analysis: analysisData }),
-              "utf8"
-            );
-          } catch {}
-        }
-      }
-
+      analysisData = await getOrCreateAnalysis({
+        texts: allTexts,
+        cacheFile,
+        contentHash: fileHash,
+        forceReanalyze: !!params.forceReanalyze,
+        params: {
+          apiKeys: params.apiKeys || [],
+          apiHost: params.apiHost || "https://api.openai.com/v1",
+          model: params.model || "",
+          lang: params.lang || "",
+        },
+      });
       if (analysisData) {
-        combinedAdditional = `${
-          combinedAdditional ? combinedAdditional + "\n\n" : ""
-        }${formatAnalysisContext(analysisData)}`;
-        onProgress({
-          filePath: file.path,
-          progress: 4,
-          status: "analyzing",
-          totalCues,
-          currentCue: 0,
-          analysis: analysisData,
-        });
+        combinedAdditional = `${combinedAdditional ? combinedAdditional + "\n\n" : ""}${formatAnalysisContext(analysisData)}`;
+        onProgress({ filePath: file.path, progress: 4, status: "analyzing", totalCues, currentCue: 0, analysis: analysisData });
       }
     } catch (analysisErr) {
       console.warn("Context analysis failed, continue without it:", analysisErr);
@@ -550,4 +442,4 @@ export async function translateFile(
   }
 }
 
-export { hashContent, mergeGlossaries, formatAnalysisContext, isLocalModel, retryTranslate };
+export { isLocalModel, retryTranslate };
