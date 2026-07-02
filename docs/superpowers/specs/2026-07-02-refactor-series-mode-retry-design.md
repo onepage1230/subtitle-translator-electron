@@ -40,8 +40,10 @@ electron/main/
     pipeline.ts       — translateFile(file, params, onProgress)：resume 預填、
                         上下文視窗 chunk 翻譯、逐行 fallback、失敗標記、部分寫檔、
                         retryTranslate（含可重試錯誤判斷；只被 pipeline 使用，不另開模組）
-shared/
-  subtitleKey.ts      — makeKey 單一來源，main 與 renderer 共用
+  shared/
+    subtitleKey.ts    — makeKey 單一來源，main 與 renderer 共用
+                        （放 electron/shared/ 而非根目錄：vite-electron-plugin
+                        的 include 只涵蓋 electron/；renderer 由 Vite 直接編譯同一原始碼）
 ```
 
 ### 模組邊界
@@ -55,7 +57,7 @@ shared/
   `check-analysis-cache` IPC 也改用此模組。
 - **`subtitle.ts`**：`normalizeCues(parsed)` 統一處理三種 parsed 形狀，
   取代目前三處重複的 if/else 判斷。
-- **`shared/subtitleKey.ts`**：`makeKey(start, end)` 唯一定義，
+- **`electron/shared/subtitleKey.ts`**：`makeKey(start, end)` 唯一定義，
   main（resume、失敗追蹤）與 renderer（失敗行標示）共用。
 
 ### 順手修正（包含在 Phase 1）
