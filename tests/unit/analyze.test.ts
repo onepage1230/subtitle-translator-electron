@@ -77,7 +77,9 @@ describe("analyzeSubtitlesForContext", () => {
     const { system } = generateObjectMock.mock.calls[0][0];
     expect(system).toMatch(/same person/i);
     expect(system).toMatch(/mutually consistent/i);
-    expect(system).toContain("Hong Hye-in");
+    // prompt 不得寫死具體人名或譯名，避免汙染輸出
+    expect(system).not.toContain("Hong Hye-in");
+    expect(system).not.toMatch(/[一-鿿]/);
   });
 
   it("injection instructs deriving alias translations from established terms", async () => {

@@ -277,7 +277,7 @@ async function analyzeSubtitlesForContext(
     system: `You are a subtitle content analyst for a translation system.
 Analyze the provided subtitle sample and return:
 1. plotSummary: A ${lang} narrative (5–10 sentences) describing what happens. Write naturally, not as a literal stitch of subtitles.
-2. glossary: Up to 15 entries of proper nouns ONLY — person names (category "person"), place names ("place"), organization or group names ("organization"), and titles, fictional terms or domain-specific jargon ("term"). Do NOT include common nouns, everyday vocabulary, or full sentences. For each entry provide the term as it appears, its preferred ${lang} translation or rendering (repeat the original term if no translation exists), and its category. If you recognize the work and an official or widely-used ${lang} translation of a name exists (e.g. from official subtitles or publications), prefer it over inventing a new rendering. When the same person appears under multiple forms (full name, given name only, nickname, romanization variants), create one entry per form and keep their translations mutually consistent — a shorter form's translation must match the corresponding part of the full name's translation (e.g. if "Hong Hye-in" is rendered 洪惠仁, then "Hyein" must be 惠仁, not a different rendering).${existingSection}`,
+2. glossary: Up to 15 entries of proper nouns ONLY — person names (category "person"), place names ("place"), organization or group names ("organization"), and titles, fictional terms or domain-specific jargon ("term"). Do NOT include common nouns, everyday vocabulary, or full sentences. For each entry provide the term as it appears, its preferred ${lang} translation or rendering (repeat the original term if no translation exists), and its category. If you recognize the work and an official or widely-used ${lang} translation of a name exists (e.g. from official subtitles or publications), prefer it over inventing a new rendering. When the same person appears under multiple forms (full name, given name only, nickname, romanization variants), create one entry per form and keep their translations mutually consistent: romanization variants of the same name must share the identical translation, and a shorter form's translation must be the corresponding part of the full name's translation — never render the same person's name two different ways.${existingSection}`,
     prompt: `Analyze this subtitle sample:\n\n` + subtitles.join("\n"),
     maxRetries: 2,
   });
@@ -355,7 +355,7 @@ async function reconcileGlossary(
     temperature,
     schema: z.object({ glossary: z.array(glossaryEntrySchema) }),
     system: `You are a glossary reconciler for a subtitle translation system.
-Different surface forms often refer to the same person: romanization variants (e.g. "Baek Hyeon-woo" and "Baek Hyun-woo"), a full name vs. a given name only (e.g. "Hong Hye-in" and "Hyein"), or nicknames.
+Different surface forms often refer to the same person: romanization variants of the same name, a full name vs. a given name only, or nicknames.
 Rules:
 1. Never change the translation of a LOCKED entry.
 2. Romanization variants of the same name must share the identical translation.
