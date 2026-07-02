@@ -70,6 +70,10 @@ function saveTranslated(
     const format = fileExtension === "vtt" ? "WebVTT" : "SRT";
     newSubtitle = stringifySync(
       parsedSubtitle.map((x) => {
+        // Non-cue nodes (e.g. VTT "header") carry a string in `data`, not
+        // a cue object — pass them through untouched instead of treating
+        // them as translatable text.
+        if (x.type !== "cue") return x;
         return {
           type: x.type,
           data: {

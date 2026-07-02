@@ -96,4 +96,23 @@ describe("saveTranslated round-trip", () => {
     const written = fs.readFileSync(out, "utf8");
     expect(written).toContain("哈囉\nHello");
   });
+
+  it("round-trips vtt", () => {
+    const VTT = `WEBVTT
+
+00:00:01.000 --> 00:00:02.000
+Hello
+
+00:00:03.000 --> 00:00:04.000
+World
+`;
+    const parsed = parseSubtitle(VTT, "vtt");
+    normalizeCues(parsed)[0].data.translatedText = "哈囉";
+    const out = tmpFile("out.vtt");
+    saveTranslated(out, parsed, "vtt", "none");
+    const written = fs.readFileSync(out, "utf8");
+    expect(written).toContain("WEBVTT");
+    expect(written).toContain("哈囉");
+    expect(written).toContain("World");
+  });
 });
