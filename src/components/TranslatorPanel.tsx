@@ -343,7 +343,7 @@ export default function TranslatorPanel() {
               if (!isDisabled && e.dataTransfer.files) {
                 const fileArray = Array.from(e.dataTransfer.files)
                   .filter((f: File) =>
-                    [".ass", ".srt", ".vtt", ".saa"].some((ext) =>
+                    [".ass", ".srt", ".vtt", ".ssa"].some((ext) =>
                       f.name.toLowerCase().endsWith(ext)
                     )
                   )
@@ -385,7 +385,7 @@ export default function TranslatorPanel() {
                       }
                     }
               }
-              accept=".ass,.srt,.vtt,.saa"
+              accept=".ass,.srt,.vtt,.ssa"
               disabled={isDisabled}
             />
             <input
