@@ -14,6 +14,9 @@ npm run build
 # E2E tests (Playwright)
 npm run pree2e   # build in test mode first
 npm run e2e
+
+# Unit tests (Vitest, test files in tests/unit/)
+npm test
 ```
 
 No lint script is defined; TypeScript type checking is done via `tsc` during build.
@@ -23,14 +26,18 @@ No lint script is defined; TypeScript type checking is done via `tsc` during bui
 This is an **Electron + React** desktop app built with Vite. The two distinct runtime contexts are:
 
 ### Electron Main Process (`electron/main/`)
-- **`index.ts`** — BrowserWindow setup + all IPC handlers: `batch-translate`, `get-analysis`, `get-translated-content`, `get-subtitle-preview`
-- **`utils/translate.ts`** — All translation logic: subtitle parsing (SRT/VTT/ASS/SSA), AI calls via Vercel AI SDK (`@ai-sdk/openai-compatible`), chunked translation with sliding context window, atomic file writes, context analysis
+- **`index.ts`** — thin BrowserWindow setup + IPC handlers: `batch-translate`, `get-analysis`, `get-translated-content`, `get-subtitle-preview`; delegates the actual work to the four modules below
+- **`utils/translate.ts`** — AI calls only: Vercel AI SDK (`@ai-sdk/openai-compatible`) chunk/single-line translation, tool-calling with `generateObject` JSON schema fallback
+- **`utils/subtitle.ts`** — subtitle parsing/serialization: `parseSubtitle` (SRT/VTT/ASS/SSA), `saveTranslated` (atomic `.tmp` rename writes), `normalizeCues`, `splitIntoChunk`
+- **`utils/analysis.ts`** — context analysis orchestration and caching: `getOrCreateAnalysis`, `hashContent`, `analysisCachePath`, `formatAnalysisContext`
+- **`utils/pipeline.ts`** — translation flow orchestration: `translateFile` (parse → analyze → chunk → parallel translate with sliding context window → line-level fallback → save), `retryTranslate` (exponential backoff), `isLocalModel`
+- **`electron/shared/subtitleKey.ts`** — `makeKey` helper for identifying cues by timestamp, shared between main-process modules and the renderer (TranslatorPanel imports it directly)
 
 ### Renderer Process (`src/`)
 - React 18 + React Router (hash-based, three routes: `/`, `/settings`, `/about`)
 - Redux Toolkit store (`src/store/`) manages only the file list in memory (not persisted)
 - All other state (API keys, model, prompt, language, temperature, etc.) is persisted via `localStorage` using `usehooks-ts`'s `useLocalStorage`
-- `src/hooks/useOpenAI.ts` — renderer-side AI client (used for any direct renderer translations, mirrors main-process logic)
+- `src/hooks/useOpenAI.ts` — localStorage-backed settings hooks (API keys, host, provider, temperature)
 
 ### IPC Communication Pattern
 Renderer invokes translation via `ipcRenderer.invoke("batch-translate", { files, params })`. Main process does the actual file I/O and AI calls, then pushes progress updates back via `ipcRenderer.send("batch-progress", data)`. The renderer listens with `ipcRenderer.on("batch-progress", handler)`.
