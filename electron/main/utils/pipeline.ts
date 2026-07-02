@@ -5,14 +5,12 @@ import pool from "tiny-async-pool";
 import { makeKey } from "../../shared/subtitleKey";
 import type { AnalysisResult } from "./translate";
 import {
-  splitIntoChunk,
-  parseSubtitle,
   translateSubtitleChunk,
   translateSubtitleSingle,
-  saveTranslated,
   analyzeSubtitlesForContext,
   synthesizePlotSummaries,
 } from "./translate";
+import { splitIntoChunk, parseSubtitle, saveTranslated, normalizeCues } from "./subtitle";
 
 function hashContent(content: string): string {
   return crypto.createHash("sha256").update(content).digest("hex");
@@ -140,14 +138,7 @@ export async function translateFile(
     const fileHash = hashContent(content);
     const cacheFile = file.path.replace(/\.[^/.]+$/, "") + ".analysis.json";
     let parsed = parseSubtitle(content, ext);
-    let subtitle;
-    if (Array.isArray(parsed)) {
-      subtitle = parsed.filter((line: any) => line.type === "cue");
-    } else if (parsed.events) {
-      subtitle = parsed.events;
-    } else {
-      subtitle = parsed;
-    }
+    const subtitle = normalizeCues(parsed);
     const totalCues = subtitle.length;
 
     // 建立原始索引對照，供後續「上下文視窗」策略使用
@@ -175,14 +166,7 @@ export async function translateFile(
       try {
         const existingContent = fs.readFileSync(outputPath, "utf8");
         let existingParsed = parseSubtitle(existingContent, ext);
-        let existingCues: any[];
-        if (Array.isArray(existingParsed)) {
-          existingCues = existingParsed.filter((l: any) => l.type === "cue");
-        } else if ((existingParsed as any).events) {
-          existingCues = (existingParsed as any).events;
-        } else {
-          existingCues = existingParsed as any[];
-        }
+        const existingCues: any[] = normalizeCues(existingParsed);
         const resumeMap = new Map<string, string>();
         existingCues.forEach((cue: any) => {
           if (cue.data) {

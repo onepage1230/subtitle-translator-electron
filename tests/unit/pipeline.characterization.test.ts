@@ -3,10 +3,8 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-vi.mock("../../electron/main/utils/translate", async (importOriginal) => {
-  const actual: any = await importOriginal();
+vi.mock("../../electron/main/utils/translate", () => {
   return {
-    ...actual, // parseSubtitle / saveTranslated / splitIntoChunk 用真實實作
     translateSubtitleChunk: vi.fn(),
     translateSubtitleSingle: vi.fn(),
     analyzeSubtitlesForContext: vi.fn(),

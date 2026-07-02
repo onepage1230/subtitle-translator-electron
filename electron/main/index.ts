@@ -4,7 +4,7 @@ import { join } from "node:path";
 import fs from "node:fs";
 import path from "node:path";
 import pool from "tiny-async-pool";
-import { parseSubtitle } from "./utils/translate";
+import { parseSubtitle, normalizeCues } from "./utils/subtitle";
 import { translateFile, hashContent } from "./utils/pipeline";
 import { makeKey } from "../shared/subtitleKey";
 
@@ -193,14 +193,7 @@ ipcMain.handle("get-subtitle-preview", async (event, filePath) => {
   const ext = path.extname(filePath).slice(1).toLowerCase();
   const content = fs.readFileSync(filePath, "utf8");
   let parsed = parseSubtitle(content, ext);
-  let subtitle;
-  if (Array.isArray(parsed)) {
-    subtitle = parsed.filter((line: any) => line.type === "cue");
-  } else if (parsed.events) {
-    subtitle = parsed.events;
-  } else {
-    subtitle = parsed;
-  }
+  const subtitle = normalizeCues(parsed);
 
   const translatedPath =
     filePath.replace(/\.[^/.]+$/, "") + ".translated." + ext;
@@ -212,16 +205,7 @@ ipcMain.handle("get-subtitle-preview", async (event, filePath) => {
   if (fs.existsSync(translatedPath)) {
     const translatedContent = fs.readFileSync(translatedPath, "utf8");
     let translatedParsed = parseSubtitle(translatedContent, ext);
-    let translatedSubtitle;
-    if (Array.isArray(translatedParsed)) {
-      translatedSubtitle = translatedParsed.filter(
-        (line: any) => line.type === "cue"
-      );
-    } else if (translatedParsed.events) {
-      translatedSubtitle = translatedParsed.events;
-    } else {
-      translatedSubtitle = translatedParsed;
-    }
+    const translatedSubtitle = normalizeCues(translatedParsed);
 
     translatedCuesArray = translatedSubtitle.map(
       (c: any) => c.data.translatedText || c.data.text
