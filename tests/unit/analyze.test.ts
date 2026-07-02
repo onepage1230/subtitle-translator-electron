@@ -65,4 +65,22 @@ describe("analyzeSubtitlesForContext", () => {
     const { system } = generateObjectMock.mock.calls[0][0];
     expect(system).not.toMatch(/MUST reuse/i);
   });
+
+  it("prompt requires consistent translations across person-name variants", async () => {
+    await analyzeSubtitlesForContext(["line"], OPTS);
+    const { system } = generateObjectMock.mock.calls[0][0];
+    expect(system).toMatch(/same person/i);
+    expect(system).toMatch(/mutually consistent/i);
+    expect(system).toContain("Hong Hye-in");
+  });
+
+  it("injection instructs deriving alias translations from established terms", async () => {
+    await analyzeSubtitlesForContext(["line"], {
+      ...OPTS,
+      existingGlossary: [{ term: "Neo", translation: "尼歐", category: "person" }],
+    });
+    const { system } = generateObjectMock.mock.calls[0][0];
+    expect(system).toMatch(/shorter form|alias/i);
+    expect(system).toMatch(/derive/i);
+  });
 });
