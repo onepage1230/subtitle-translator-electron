@@ -115,6 +115,7 @@
       },
       "not_translated_yet": "Not translated yet",
       "line_failed": "Translation failed",
+      "retry_failed": "Retry {{count}} failed lines",
       "done_with_failures": "done ({{count}} lines failed) - 100.0%",
       "reanalyze_dialog": {
         "message": "{{count}} file(s) have a cached analysis. Re-analyze?",

@@ -115,6 +115,7 @@
       },
       "not_translated_yet": "尚未翻译",
       "line_failed": "翻译失败",
+      "retry_failed": "重译 {{count}} 行失败字幕",
       "done_with_failures": "完成（{{count}} 行翻译失败）- 100.0%",
       "reanalyze_dialog": {
         "message": "检测到 {{count}} 个档案有先前的分析结果，是否重新分析？",

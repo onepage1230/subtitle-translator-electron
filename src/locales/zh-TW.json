@@ -115,6 +115,7 @@
       },
       "not_translated_yet": "尚未翻譯",
       "line_failed": "翻譯失敗",
+      "retry_failed": "重譯 {{count}} 行失敗字幕",
       "done_with_failures": "完成（{{count}} 行翻譯失敗）- 100.0%",
       "reanalyze_dialog": {
         "message": "偵測到 {{count}} 個檔案有先前的分析結果，是否重新分析？",

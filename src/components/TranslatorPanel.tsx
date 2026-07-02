@@ -117,6 +117,20 @@ export default function TranslatorPanel() {
       0
     ) / (files.length || 1);
 
+  const buildParams = (forceReanalyze: boolean) => ({
+    apiKeys: keys,
+    apiHost,
+    model,
+    prompt,
+    lang,
+    additional,
+    temperature,
+    multiLangSave,
+    delay: delay * 1000,
+    forceReanalyze,
+    concurrentRequests,
+  });
+
   const executeBatchTranslation = async (forceReanalyze: boolean) => {
     setIsTranslating(true);
     setBatchProgress(
@@ -128,19 +142,7 @@ export default function TranslatorPanel() {
         {}
       )
     );
-    const params = {
-      apiKeys: keys,
-      apiHost,
-      model,
-      prompt,
-      lang,
-      additional,
-      temperature,
-      multiLangSave,
-      delay: delay * 1000,
-      forceReanalyze,
-      concurrentRequests,
-    };
+    const params = buildParams(forceReanalyze);
     try {
       await ipcRenderer.invoke("batch-translate", { files, params });
       setIsTranslating(false);
@@ -285,6 +287,30 @@ export default function TranslatorPanel() {
   const failedKeySet = new Set<string>(
     selectedFile ? (batchProgress[selectedFile.path]?.failedKeys || []) : []
   );
+
+  const selectedProgress = selectedFile
+    ? batchProgress[selectedFile.path]
+    : undefined;
+  const canRetryFailed =
+    !isTranslating &&
+    selectedProgress?.status === "done" &&
+    (selectedProgress.failedCues ?? 0) > 0 &&
+    multiLangSave === "none";
+
+  const retryFailedLines = async () => {
+    if (!selectedFile) return;
+    setIsTranslating(true);
+    try {
+      await ipcRenderer.invoke("retry-file", {
+        file: selectedFile,
+        params: buildParams(false),
+      });
+      await loadCues(selectedFile.path);
+    } catch (e: unknown) {
+      toast.error(`Retry failed: ${(e as Error).message}`);
+    }
+    setIsTranslating(false);
+  };
 
   return (
     <div className="w-full h-full flex flex-col">
@@ -495,9 +521,22 @@ export default function TranslatorPanel() {
             <div className="bg-white p-4 rounded max-w-4xl  h-full overflow-auto">
               <div className="flex justify-between items-center mb-4">
                 <h3 className="text-lg font-bold">{selectedFile.name}</h3>
-                <Button onClick={closeModal} icon="bx-x" className="shrink-0">
-                  {t("translate.close")}
-                </Button>
+                <div className="flex items-center gap-2 shrink-0">
+                  {canRetryFailed && (
+                    <Button
+                      onClick={retryFailedLines}
+                      icon="bx-refresh"
+                      variant="primary"
+                    >
+                      {t("translate.retry_failed", {
+                        count: selectedProgress?.failedCues,
+                      })}
+                    </Button>
+                  )}
+                  <Button onClick={closeModal} icon="bx-x">
+                    {t("translate.close")}
+                  </Button>
+                </div>
               </div>
               <div className="overflow-x-auto">
                 {selectedAnalysis && (
