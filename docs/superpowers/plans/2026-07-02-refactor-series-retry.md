@@ -1883,21 +1883,25 @@ const retryFailedLines = async () => {
 };
 ```
 
-Modal 標題列（`<h3>` 與關閉按鈕之間）插入：
+Modal 標題列是 `flex justify-between`，直接插入第三個子元素會被 justify-between
+推到中間——把重試鈕與關閉鈕包進同一個容器：
 
 ```tsx
-{canRetryFailed && (
-  <Button
-    onClick={retryFailedLines}
-    icon="bx-refresh"
-    variant="primary"
-    className="shrink-0 mr-2"
-  >
-    {t("translate.retry_failed", {
-      count: selectedProgress?.failedCues,
-    })}
-  </Button>
-)}
+<div className="flex justify-between items-center mb-4">
+  <h3 className="text-lg font-bold">{selectedFile.name}</h3>
+  <div className="flex items-center gap-2 shrink-0">
+    {canRetryFailed && (
+      <Button onClick={retryFailedLines} icon="bx-refresh" variant="primary">
+        {t("translate.retry_failed", {
+          count: selectedProgress?.failedCues,
+        })}
+      </Button>
+    )}
+    <Button onClick={closeModal} icon="bx-x">
+      {t("translate.close")}
+    </Button>
+  </div>
+</div>
 ```
 
 - [ ] **Step 3: i18n 三語系**
