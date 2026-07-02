@@ -66,6 +66,12 @@ describe("analyzeSubtitlesForContext", () => {
     expect(system).not.toMatch(/MUST reuse/i);
   });
 
+  it("prompt prefers official published translations when known", async () => {
+    await analyzeSubtitlesForContext(["line"], OPTS);
+    const { system } = generateObjectMock.mock.calls[0][0];
+    expect(system).toMatch(/official/i);
+  });
+
   it("prompt requires consistent translations across person-name variants", async () => {
     await analyzeSubtitlesForContext(["line"], OPTS);
     const { system } = generateObjectMock.mock.calls[0][0];
