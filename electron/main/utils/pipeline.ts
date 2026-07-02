@@ -368,20 +368,26 @@ export async function translateFile(
     for (let k = 0; k < untranslated.length; k++) {
       const cue = untranslated[k];
       if (cue && cue.data) {
-        cue.data.translatedText = await retryTranslate(
-          async (singleText) =>
-            translateSubtitleSingle(singleText, {
-              ...params,
-              apiKeys: params.apiKeys || [],
-              apiHost: params.apiHost || "https://api.openai.com/v1",
-              model: params.model || "",
-              prompt: params.prompt || "",
-              lang: params.lang || "",
-              additional: combinedAdditional || "",
-              temperature: params.temperature || 1,
-            }),
-          cue.data.text
-        );
+        try {
+          cue.data.translatedText = await retryTranslate(
+            async (singleText) =>
+              translateSubtitleSingle(singleText, {
+                ...params,
+                apiKeys: params.apiKeys || [],
+                apiHost: params.apiHost || "https://api.openai.com/v1",
+                model: params.model || "",
+                prompt: params.prompt || "",
+                lang: params.lang || "",
+                additional: combinedAdditional || "",
+                temperature: params.temperature || 1,
+              }),
+            cue.data.text
+          );
+        } catch (lineErr) {
+          console.warn("Line-level fallback failed, marking as __FAILED__:", lineErr);
+          cue.data.translatedText = "__FAILED__";
+          failedKeys.add(makeKey(cue.data.start, cue.data.end));
+        }
         const currentCueIndex = subtitle.findIndex((c: any) => c === cue);
         if (currentCueIndex !== -1) {
           completedCues++;

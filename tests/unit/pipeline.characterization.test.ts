@@ -154,4 +154,24 @@ describe("translateFile characterization", () => {
     expect(last.status).toBe("done");
     expect(last.analysis).toBeFalsy();
   });
+
+  it("marks a line as failed instead of failing the whole file", async () => {
+    vi.mocked(translate.translateSubtitleChunk).mockRejectedValue(new Error("boom"));
+    vi.mocked(translate.translateSubtitleSingle).mockImplementation(async (s: string) => {
+      if (s === "World") throw new Error("bad line");
+      return `T:${s}`;
+    });
+    const file = makeTmpSrt();
+    const events: any[] = [];
+    await translateFile({ path: file, name: "movie.srt" }, BASE_PARAMS, (e) =>
+      events.push(e)
+    );
+    const last = events[events.length - 1];
+    expect(last.status).toBe("done"); // 不是 error
+    expect(last.failedCues).toBe(1);
+    expect(last.failedKeys).toHaveLength(1);
+    const out = fs.readFileSync(file.replace(/\.srt$/, ".translated.srt"), "utf8");
+    expect(out).toContain("T:Hello");
+    expect(out).toContain("World"); // 失敗行保留原文
+  });
 });
