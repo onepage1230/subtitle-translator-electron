@@ -5,7 +5,7 @@ import fs from "node:fs";
 import path from "node:path";
 import pool from "tiny-async-pool";
 import { parseSubtitle, normalizeCues } from "./utils/subtitle";
-import { translateFile } from "./utils/pipeline";
+import { translateFile, groupFilesByFolder } from "./utils/pipeline";
 import { readAnalysisCache, analysisCachePath, hashContent } from "./utils/analysis";
 import { makeKey } from "../shared/subtitleKey";
 
@@ -159,8 +159,13 @@ ipcMain.handle("batch-translate", async (event, { files, params }) => {
       event.sender.send("batch-progress", data);
     });
   };
-  for await (const _ of pool(3, files, processFile)) {
-    // Process all files in parallel with concurrency 3
+  const groups = groupFilesByFolder(files);
+  for await (const _ of pool(3, groups, async (group) => {
+    for (const file of group) {
+      await processFile(file); // 同資料夾循序，確保後集吃到前集詞彙
+    }
+  })) {
+    // 不同資料夾之間維持並行（concurrency 3）
   }
   return { success: true };
 });

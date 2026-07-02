@@ -6,6 +6,7 @@ import type { AnalysisResult } from "./translate";
 import { translateSubtitleChunk, translateSubtitleSingle } from "./translate";
 import { splitIntoChunk, parseSubtitle, saveTranslated, normalizeCues } from "./subtitle";
 import { hashContent, analysisCachePath, getOrCreateAnalysis, formatAnalysisContext } from "./analysis";
+import { loadSeriesGlossary, mergeIntoSeriesGlossary, saveSeriesGlossary } from "./seriesGlossary";
 
 function isLocalModel(apiHost: string): boolean {
   return /localhost|127\.0\.0\.1|0\.0\.0\.0|::1/.test(apiHost);
@@ -158,6 +159,9 @@ export async function translateFile(
     let combinedAdditional = params.additional || "";
     let analysisData: AnalysisResult | null = null;
 
+    const folder = path.dirname(file.path);
+    const seriesTerms = loadSeriesGlossary(folder);
+
     try {
       analysisData = await getOrCreateAnalysis({
         texts: allTexts,
@@ -170,8 +174,13 @@ export async function translateFile(
           model: params.model || "",
           lang: params.lang || "",
         },
+        existingGlossary: seriesTerms,
       });
       if (analysisData) {
+        const combinedGlossary = mergeIntoSeriesGlossary(seriesTerms, analysisData.glossary);
+        saveSeriesGlossary(folder, combinedGlossary);
+        // [Context] 與進度事件都使用合併後的完整詞彙表
+        analysisData = { plotSummary: analysisData.plotSummary, glossary: combinedGlossary };
         combinedAdditional = `${combinedAdditional ? combinedAdditional + "\n\n" : ""}${formatAnalysisContext(analysisData)}`;
         onProgress({ filePath: file.path, progress: 4, status: "analyzing", totalCues, currentCue: 0, analysis: analysisData });
       }
@@ -446,6 +455,23 @@ export async function translateFile(
       error: e.message,
     });
   }
+}
+
+export function groupFilesByFolder(
+  files: Array<{ path: string; name: string }>
+): Array<Array<{ path: string; name: string }>> {
+  const groups = new Map<string, Array<{ path: string; name: string }>>();
+  for (const f of files) {
+    const dir = path.dirname(f.path);
+    if (!groups.has(dir)) groups.set(dir, []);
+    groups.get(dir)!.push(f);
+  }
+  for (const group of groups.values()) {
+    group.sort((a, b) =>
+      a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: "base" })
+    );
+  }
+  return [...groups.values()];
 }
 
 export { isLocalModel, retryTranslate };

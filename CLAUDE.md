@@ -55,6 +55,12 @@ Renderer invokes translation via `ipcRenderer.invoke("batch-translate", { files,
 8. Atomic file writes after each chunk update (`.tmp` rename pattern) for live preview
 9. Output saved as `<original-name>.translated.<ext>` in same directory
 
+Series mode: subtitle files in the same folder share an accumulated glossary
+(`.series-glossary.json`, first-wins, capped at 100 entries by category priority
+person > organization > place > term). Files in the same folder are processed
+sequentially (natural filename order); different folders run in parallel.
+Delete the JSON file to reset the series glossary.
+
 ### Settings Persistence
 All user settings use `localStorage` keys:
 - `api_keys` — array of API key strings
