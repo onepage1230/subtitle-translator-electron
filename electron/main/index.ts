@@ -170,6 +170,14 @@ ipcMain.handle("batch-translate", async (event, { files, params }) => {
   return { success: true };
 });
 
+ipcMain.handle("retry-file", async (event, { file, params }) => {
+  await translateFile(file, params, (data) => {
+    if (data.analysis) analysisCache.set(data.filePath, data.analysis);
+    event.sender.send("batch-progress", data);
+  });
+  return { success: true };
+});
+
 // Allow renderer to fetch cached analysis for a file (in case progress event missed)
 ipcMain.handle("get-analysis", async (event, filePath: string) => {
   try {
