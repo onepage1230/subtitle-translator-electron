@@ -7,6 +7,8 @@ import pool from "tiny-async-pool";
 import { parseSubtitle, normalizeCues } from "./utils/subtitle";
 import { translateFile, groupFilesByFolder } from "./utils/pipeline";
 import { readAnalysisCache, analysisCachePath, hashContent } from "./utils/analysis";
+import { loadSeriesGlossary, applyGlossaryOp } from "./utils/seriesGlossary";
+import type { GlossaryOp } from "./utils/seriesGlossary";
 import { makeKey } from "../shared/subtitleKey";
 
 // The built directory structure
@@ -243,3 +245,15 @@ ipcMain.handle("get-subtitle-preview", async (event, filePath) => {
 
   return { cues };
 });
+
+// 系列詞彙表讀寫：renderer 傳檔案路徑，main 以其所在資料夾為準
+ipcMain.handle("get-series-glossary", async (_, filePath: string) => {
+  return { terms: loadSeriesGlossary(path.dirname(filePath)).terms };
+});
+
+ipcMain.handle(
+  "update-series-glossary",
+  async (_, { filePath, op }: { filePath: string; op: GlossaryOp }) => {
+    return applyGlossaryOp(path.dirname(filePath), op);
+  }
+);
