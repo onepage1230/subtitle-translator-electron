@@ -30,8 +30,41 @@ function formatAnalysisContext(analysis: AnalysisResult): string {
   const glossaryLines = analysis.glossary
     .map((g) => `- ${g.term}: ${g.translation}`)
     .join("\n");
-  const glossarySection = glossaryLines ? `\n## Glossary\n${glossaryLines}` : "";
+  // 詞彙表必須是強制對照：劇情摘要是敘事文字，模型容易跟著它走（例如把
+  // 只有名字的稱呼統一成全名），所以明確聲明衝突時以詞彙表為準。
+  const glossarySection = glossaryLines
+    ? `\n## Glossary\nThese translations are authoritative — if the Plot Summary renders a name differently, follow the glossary.\nWhen the source text uses only a given name (no family name), do not add the family name.\n${glossaryLines}`
+    : "";
   return `[Context]\n## Plot Summary\n${analysis.plotSummary}${glossarySection}`;
+}
+
+// 分析快取的劇情摘要內嵌了當時的譯名；使用者事後在詞彙表改了譯名時，
+// 摘要裡的舊譯名會與詞彙表互相矛盾、污染翻譯輸出。這裡在組合 [Context]
+// 前做確定性替換（不回寫快取檔）。長字串優先避免部分重疊；單字譯名跳過
+// 以免誤傷無關文字。
+function alignPlotSummaryWithGlossary(
+  plotSummary: string,
+  cachedGlossary: GlossaryEntry[],
+  finalGlossary: GlossaryEntry[]
+): string {
+  const finalByTerm = new Map(
+    finalGlossary.map((g) => [g.term.toLowerCase(), g.translation])
+  );
+  const renames = cachedGlossary
+    .map((g) => ({
+      from: g.translation,
+      to: finalByTerm.get(g.term.toLowerCase()),
+    }))
+    .filter(
+      (r): r is { from: string; to: string } =>
+        typeof r.to === "string" && r.to !== r.from && r.from.length >= 2
+    )
+    .sort((a, b) => b.from.length - a.from.length);
+  let result = plotSummary;
+  for (const { from, to } of renames) {
+    result = result.replaceAll(from, to);
+  }
+  return result;
 }
 
 function analysisCachePath(filePath: string): string {
@@ -128,6 +161,7 @@ export {
   hashContent,
   mergeGlossaries,
   formatAnalysisContext,
+  alignPlotSummaryWithGlossary,
   analysisCachePath,
   readAnalysisCache,
   getOrCreateAnalysis,

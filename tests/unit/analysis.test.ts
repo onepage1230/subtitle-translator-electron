@@ -13,6 +13,7 @@ vi.mock("../../electron/main/utils/translate", () => ({
 import {
   mergeGlossaries,
   formatAnalysisContext,
+  alignPlotSummaryWithGlossary,
   readAnalysisCache,
   getOrCreateAnalysis,
   hashContent,
@@ -55,6 +56,73 @@ describe("formatAnalysisContext", () => {
     const s = formatAnalysisContext({ plotSummary: "p", glossary: [] } as any);
     expect(s).toContain("## Plot Summary");
     expect(s).not.toContain("## Glossary");
+  });
+
+  it("marks the glossary as authoritative over the plot summary", () => {
+    const s = formatAnalysisContext({
+      plotSummary: "p",
+      glossary: [{ term: "Hyunwoo", translation: "賢祐", category: "person" }],
+    } as any);
+    expect(s).toContain("## Glossary");
+    expect(s).toContain("- Hyunwoo: 賢祐");
+    expect(s).toContain("authoritative");
+    expect(s).toContain("do not add the family name");
+  });
+});
+
+describe("alignPlotSummaryWithGlossary", () => {
+  const p = (term: string, translation: string) => ({
+    term,
+    translation,
+    category: "person" as const,
+  });
+
+  it("replaces superseded translations in the summary", () => {
+    const out = alignPlotSummaryWithGlossary(
+      "金秀賢向慧仁告白，探望生病的慧仁。",
+      [p("Hyein", "慧仁")],
+      [p("Hyein", "海仁")]
+    );
+    expect(out).toBe("金秀賢向海仁告白，探望生病的海仁。");
+  });
+
+  it("replaces longer translations first to avoid partial overlap", () => {
+    // 洪慧仁 → 洪惠仁 與 慧仁 → 海仁 同時存在：
+    // 若先換短字串，洪慧仁會被改成洪海仁，長字串就找不到了
+    const out = alignPlotSummaryWithGlossary(
+      "洪慧仁和慧仁",
+      [p("Hong Hye-in", "洪慧仁"), p("Hyein", "慧仁")],
+      [p("Hong Hye-in", "洪惠仁"), p("Hyein", "海仁")]
+    );
+    expect(out).toBe("洪惠仁和海仁");
+  });
+
+  it("matches terms case-insensitively between cached and final glossaries", () => {
+    const out = alignPlotSummaryWithGlossary(
+      "大惠登場",
+      [p("Da-hye", "大惠")],
+      [p("da-hye", "多惠")]
+    );
+    expect(out).toBe("多惠登場");
+  });
+
+  it("skips single-character old translations to avoid false hits", () => {
+    const out = alignPlotSummaryWithGlossary(
+      "雨傘下的傘兵",
+      [{ term: "Umbrella", translation: "傘", category: "term" as const }],
+      [{ term: "Umbrella", translation: "雨具", category: "term" as const }]
+    );
+    expect(out).toBe("雨傘下的傘兵");
+  });
+
+  it("returns the summary unchanged when nothing differs", () => {
+    const summary = "白賢祐與洪海仁";
+    const out = alignPlotSummaryWithGlossary(
+      summary,
+      [p("Baek Hyun-woo", "白賢祐")],
+      [p("Baek Hyun-woo", "白賢祐"), p("Hyein", "海仁")]
+    );
+    expect(out).toBe(summary);
   });
 });
 
