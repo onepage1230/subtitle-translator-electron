@@ -46,7 +46,7 @@ Renderer invokes translation via `ipcRenderer.invoke("batch-translate", { files,
 
 ### Translation Pipeline (Main Process)
 1. Parse subtitle file (`parseSubtitle`) → filter cues
-2. Analyze all text for plot summary + glossary (`analyzeSubtitlesForContext`) — result prepended to every translation request as `[Context]`
+2. Analyze all text for plot summary + glossary (`analyzeSubtitlesForContext`) — result prepended to every translation request as `[Context]`; the plot summary goes in full, but the glossary is filtered per request to the terms appearing in that request's text (`filterGlossaryForText`)
 3. Split into chunks of 20 (`splitIntoChunk`)
 4. Parallel chunk processing (concurrency 10 via `tiny-async-pool`) with sliding context window (±5 cues around each chunk)
 5. Each chunk: try tool-calling first, fall back to `generateObject` (JSON schema)
