@@ -38,6 +38,35 @@ function formatAnalysisContext(analysis: AnalysisResult): string {
   return `[Context]\n## Plot Summary\n${analysis.plotSummary}${glossarySection}`;
 }
 
+// 每個 chunk 只送出現在該段文字中的詞條：誤含便宜、漏掉昂貴，匹配從寬——
+// 首尾皆英數的 term 用 \b 邊界避免子字串誤中（Bae 不中 Baek，變格如
+// Hyunwoo's 因界符為非字元仍命中），其他（CJK 等）用 substring。
+// 連字號拼法變體（Hye-in vs Hyein、Hyun-woo vs Hyunwoo）：主匹配失敗時
+// 兩邊都去掉連字號再比一次。
+function filterGlossaryForText(
+  glossary: GlossaryEntry[],
+  texts: string[]
+): GlossaryEntry[] {
+  const haystack = texts.join("\n").toLowerCase();
+  if (!haystack.trim() || glossary.length === 0) return [];
+  const haystackNoHyphen = haystack.replace(/-/g, "");
+  const boundMatch = (term: string, hay: string) => {
+    const escaped = term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    return new RegExp(`\\b${escaped}\\b`).test(hay);
+  };
+  return glossary.filter((g) => {
+    const term = g.term.trim().toLowerCase();
+    if (!term) return false;
+    if (/^[a-z0-9]/.test(term) && /[a-z0-9]$/.test(term)) {
+      return (
+        boundMatch(term, haystack) ||
+        boundMatch(term.replace(/-/g, ""), haystackNoHyphen)
+      );
+    }
+    return haystack.includes(term);
+  });
+}
+
 // 分析快取的劇情摘要內嵌了當時的譯名；使用者事後在詞彙表改了譯名時，
 // 摘要裡的舊譯名會與詞彙表互相矛盾、污染翻譯輸出。這裡在組合 [Context]
 // 前做確定性替換（不回寫快取檔）。長字串優先避免部分重疊；單字譯名跳過
@@ -161,6 +190,7 @@ export {
   hashContent,
   mergeGlossaries,
   formatAnalysisContext,
+  filterGlossaryForText,
   alignPlotSummaryWithGlossary,
   analysisCachePath,
   readAnalysisCache,

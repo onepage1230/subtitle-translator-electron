@@ -18,6 +18,7 @@ import {
   getOrCreateAnalysis,
   hashContent,
   analysisCachePath,
+  filterGlossaryForText,
 } from "../../electron/main/utils/analysis";
 import * as translate from "../../electron/main/utils/translate";
 
@@ -203,5 +204,70 @@ describe("getOrCreateAnalysis", () => {
     for (const call of vi.mocked(translate.analyzeSubtitlesForContext).mock.calls) {
       expect(call[1].existingGlossary).toEqual(existing);
     }
+  });
+});
+
+describe("filterGlossaryForText", () => {
+  const g = (term: string, category: any = "person") => ({
+    term,
+    translation: `譯${term}`,
+    category,
+  });
+
+  it("keeps only terms that appear in the texts, preserving order", () => {
+    const result = filterGlossaryForText(
+      [g("Neo"), g("Trinity"), g("Morpheus")],
+      ["Neo talks to Trinity.", "another line"]
+    );
+    expect(result.map((x) => x.term)).toEqual(["Neo", "Trinity"]);
+  });
+
+  it("matches case-insensitively", () => {
+    expect(filterGlossaryForText([g("Neo")], ["NEO!"])).toHaveLength(1);
+  });
+
+  it("does not match inside longer words (Bae vs Baek)", () => {
+    expect(filterGlossaryForText([g("Bae")], ["Baek Hyun-woo appears"])).toEqual([]);
+  });
+
+  it("matches inflected forms separated by non-word characters", () => {
+    expect(filterGlossaryForText([g("Hyunwoo")], ["Hyunwoo's plan"])).toHaveLength(1);
+    expect(filterGlossaryForText([g("Hyein")], ["Hyein-ah, come here"])).toHaveLength(1);
+  });
+
+  it("matches CJK terms by substring", () => {
+    expect(
+      filterGlossaryForText([g("女王集團", "organization")], ["歡迎來到女王集團總部"])
+    ).toHaveLength(1);
+  });
+
+  it("escapes regex special characters inside terms", () => {
+    // 未 escape 時 'Mr. Kim' 的 '.' 會誤中 'Mrs Kim'
+    expect(filterGlossaryForText([g("Mr. Kim")], ["Mrs Kim arrived"])).toEqual([]);
+    expect(filterGlossaryForText([g("Mr. Kim")], ["Mr. Kim arrived"])).toHaveLength(1);
+    // 首尾非英數的 term 走 substring，特殊字元不得炸掉
+    expect(
+      filterGlossaryForText([g("J Hotel (Seoul)", "place")], ["at J Hotel (Seoul) tonight"])
+    ).toHaveLength(1);
+  });
+
+  it("returns empty for empty glossary or blank texts", () => {
+    expect(filterGlossaryForText([], ["Neo"])).toEqual([]);
+    expect(filterGlossaryForText([g("Neo")], ["", "  "])).toEqual([]);
+  });
+
+  it("matches hyphenation variants in both directions", () => {
+    // term 無連字號、原文有：實測回歸案例（Hye-in → Hyein）
+    expect(
+      filterGlossaryForText([g("Hyein")], ["only Baek Seobang knows that Hye-in is sick"])
+    ).toHaveLength(1);
+    // term 有連字號、原文無
+    expect(
+      filterGlossaryForText([g("Baek Hyun-woo")], ["Baek Hyunwoo appears"])
+    ).toHaveLength(1);
+  });
+
+  it("hyphen normalization does not weaken boundary protection", () => {
+    expect(filterGlossaryForText([g("Bae")], ["Baek Hyun-woo appears"])).toEqual([]);
   });
 });
