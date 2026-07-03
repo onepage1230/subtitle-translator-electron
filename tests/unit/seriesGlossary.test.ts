@@ -57,14 +57,17 @@ describe("load/save", () => {
     const folder = tmpFolder();
     saveSeriesGlossary(folder, [e("Neo", "person")]);
     expect(fs.existsSync(path.join(folder, SERIES_GLOSSARY_FILE))).toBe(true);
-    expect(loadSeriesGlossary(folder)).toEqual([e("Neo", "person")]);
+    expect(loadSeriesGlossary(folder)).toEqual({
+      terms: [e("Neo", "person")],
+      excluded: [],
+    });
   });
 
-  it("returns [] for missing or corrupted file", () => {
+  it("returns empty data for missing or corrupted file", () => {
     const folder = tmpFolder();
-    expect(loadSeriesGlossary(folder)).toEqual([]);
+    expect(loadSeriesGlossary(folder)).toEqual({ terms: [], excluded: [] });
     fs.writeFileSync(path.join(folder, SERIES_GLOSSARY_FILE), "{oops");
-    expect(loadSeriesGlossary(folder)).toEqual([]);
+    expect(loadSeriesGlossary(folder)).toEqual({ terms: [], excluded: [] });
   });
 
   it("fills missing category as 'term' when loading legacy entries", () => {
@@ -73,7 +76,49 @@ describe("load/save", () => {
       path.join(folder, SERIES_GLOSSARY_FILE),
       JSON.stringify({ terms: [{ term: "Neo", translation: "尼歐" }] })
     );
-    expect(loadSeriesGlossary(folder)[0].category).toBe("term");
+    expect(loadSeriesGlossary(folder).terms[0].category).toBe("term");
+  });
+});
+
+describe("excluded list", () => {
+  it("merge skips excluded terms case-insensitively", () => {
+    const merged = mergeIntoSeriesGlossary(
+      [e("Neo")],
+      [e("Trinity"), e("Morpheus")],
+      ["trinity", "neo"]
+    );
+    expect(merged.map((x) => x.term)).toEqual(["Morpheus"]);
+  });
+
+  it("merge without excluded param behaves as before", () => {
+    const merged = mergeIntoSeriesGlossary([e("Neo")], [e("neo"), e("Trinity")]);
+    expect(merged.map((x) => x.term)).toEqual(["Neo", "Trinity"]);
+  });
+
+  it("round-trips excluded through save/load", () => {
+    const folder = tmpFolder();
+    saveSeriesGlossary(folder, [e("Neo", "person")], ["trinity"]);
+    expect(loadSeriesGlossary(folder)).toEqual({
+      terms: [e("Neo", "person")],
+      excluded: ["trinity"],
+    });
+  });
+
+  it("legacy file without excluded field loads as empty excluded", () => {
+    const folder = tmpFolder();
+    fs.writeFileSync(
+      path.join(folder, SERIES_GLOSSARY_FILE),
+      JSON.stringify({ terms: [e("Neo", "person")] })
+    );
+    expect(loadSeriesGlossary(folder).excluded).toEqual([]);
+  });
+
+  it("save returns true on success and false on failure", () => {
+    const folder = tmpFolder();
+    expect(saveSeriesGlossary(folder, [e("Neo", "person")])).toBe(true);
+    expect(
+      saveSeriesGlossary(path.join(folder, "no-such-dir"), [e("Neo", "person")])
+    ).toBe(false);
   });
 });
 

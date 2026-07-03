@@ -54,7 +54,7 @@ it("episode 2 analysis receives episode 1 glossary; series file accumulates", as
   await translateFile({ path: ep1, name: "EP1.srt" }, BASE_PARAMS, () => {});
 
   // EP1 後：series glossary 已含 Neo
-  expect(loadSeriesGlossary(folder).map((t) => t.term)).toEqual(["Neo"]);
+  expect(loadSeriesGlossary(folder).terms.map((t) => t.term)).toEqual(["Neo"]);
 
   await translateFile({ path: ep2, name: "EP2.srt" }, BASE_PARAMS, () => {});
 
@@ -67,7 +67,7 @@ it("episode 2 analysis receives episode 1 glossary; series file accumulates", as
   }
 
   // series glossary 累積兩集詞彙
-  const terms = loadSeriesGlossary(folder).map((t) => t.term).sort();
+  const terms = loadSeriesGlossary(folder).terms.map((t) => t.term).sort();
   expect(terms).toEqual(["Neo", "Trinity"]);
 });
 
@@ -106,7 +106,7 @@ it("reconciliation aligns romanization variants across episodes", async () => {
   expect(lockedEntries.map((e: any) => e.term)).toContain("Baek Hyeon-woo");
 
   // 兩種拼法在 series glossary 中共用同一譯名
-  const glossary = loadSeriesGlossary(folder);
+  const glossary = loadSeriesGlossary(folder).terms;
   const byTerm = Object.fromEntries(glossary.map((g) => [g.term, g.translation]));
   expect(byTerm["Baek Hyeon-woo"]).toBe("白賢祐");
   expect(byTerm["Baek Hyun-woo"]).toBe("白賢祐");
@@ -134,6 +134,6 @@ it("falls back to the raw glossary when reconciliation fails", async () => {
 
   // 調和失敗不阻斷：翻譯完成，原始詞彙表照常寫入
   expect(events[events.length - 1].status).toBe("done");
-  const terms = loadSeriesGlossary(folder).map((t) => t.term).sort();
+  const terms = loadSeriesGlossary(folder).terms.map((t) => t.term).sort();
   expect(terms).toEqual(["Hong Hye-in", "Hyein"]);
 });

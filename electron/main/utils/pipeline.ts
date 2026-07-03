@@ -165,7 +165,7 @@ export async function translateFile(
     let analysisData: AnalysisResult | null = null;
 
     const folder = path.dirname(file.path);
-    const seriesTerms = loadSeriesGlossary(folder);
+    const { terms: seriesTerms, excluded: seriesExcluded } = loadSeriesGlossary(folder);
 
     try {
       analysisData = await getOrCreateAnalysis({
@@ -209,8 +209,8 @@ export async function translateFile(
             console.warn("Glossary reconciliation failed, using raw glossary:", reconcileErr);
           }
         }
-        const combinedGlossary = mergeIntoSeriesGlossary(seriesTerms, episodeGlossary);
-        saveSeriesGlossary(folder, combinedGlossary);
+        const combinedGlossary = mergeIntoSeriesGlossary(seriesTerms, episodeGlossary, seriesExcluded);
+        saveSeriesGlossary(folder, combinedGlossary, seriesExcluded);
         // [Context] 與進度事件都使用合併後的完整詞彙表
         analysisData = { plotSummary: analysisData.plotSummary, glossary: combinedGlossary };
         combinedAdditional = `${combinedAdditional ? combinedAdditional + "\n\n" : ""}${formatAnalysisContext(analysisData)}`;
