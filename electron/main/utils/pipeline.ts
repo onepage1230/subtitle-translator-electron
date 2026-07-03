@@ -5,7 +5,7 @@ import { makeKey } from "../../shared/subtitleKey";
 import type { AnalysisResult } from "./translate";
 import { translateSubtitleChunk, translateSubtitleSingle, reconcileGlossary } from "./translate";
 import { splitIntoChunk, parseSubtitle, saveTranslated, normalizeCues } from "./subtitle";
-import { hashContent, analysisCachePath, getOrCreateAnalysis, formatAnalysisContext } from "./analysis";
+import { hashContent, analysisCachePath, getOrCreateAnalysis, formatAnalysisContext, alignPlotSummaryWithGlossary } from "./analysis";
 import {
   loadSeriesGlossary,
   mergeIntoSeriesGlossary,
@@ -211,8 +211,14 @@ export async function translateFile(
         }
         const combinedGlossary = mergeIntoSeriesGlossary(seriesTerms, episodeGlossary, seriesExcluded);
         saveSeriesGlossary(folder, combinedGlossary, seriesExcluded);
-        // [Context] 與進度事件都使用合併後的完整詞彙表
-        analysisData = { plotSummary: analysisData.plotSummary, glossary: combinedGlossary };
+        // [Context] 與進度事件都使用合併後的完整詞彙表；
+        // 快取摘要可能內嵌舊譯名（使用者事後編輯過詞彙表），先依最終詞彙表做確定性替換
+        const alignedSummary = alignPlotSummaryWithGlossary(
+          analysisData.plotSummary,
+          analysisData.glossary,
+          combinedGlossary
+        );
+        analysisData = { plotSummary: alignedSummary, glossary: combinedGlossary };
         combinedAdditional = `${combinedAdditional ? combinedAdditional + "\n\n" : ""}${formatAnalysisContext(analysisData)}`;
         onProgress({ filePath: file.path, progress: 4, status: "analyzing", totalCues, currentCue: 0, analysis: analysisData });
       }
