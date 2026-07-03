@@ -88,7 +88,8 @@ type GlossaryOp =
   | { type: "delete"; term: string };
 ```
 
-- 流程:load → 套用操作(上述純函式)→ save → 回傳更新後的 `{ terms }`。
+- 流程:load → 套用操作(上述純函式)→ save → 回傳更新後的 `{ terms, excluded }`
+  (實作時修訂:與 `get-series-glossary` 對稱,renderer 以回傳值同步「使用者清空過」狀態)。
 - 驗證失敗(空譯名、term 不存在)不套用、回傳現況;UI 重繪後自然回到正確狀態,
   不需錯誤彈窗。
 - 寫入失敗(如唯讀資料夾)→ handler throw,由 renderer 顯示錯誤。

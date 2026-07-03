@@ -44,6 +44,7 @@ export default function GlossaryEditor({
       setEverExcluded((result.excluded?.length ?? 0) > 0);
     } catch {
       setTerms([]);
+      setEverExcluded(false);
     }
   };
 
@@ -66,6 +67,7 @@ export default function GlossaryEditor({
         op,
       });
       setTerms(result.terms);
+      setEverExcluded(result.excluded.length > 0);
       setDirty(true);
     } catch {
       setError(true);

@@ -232,12 +232,13 @@ describe("applyGlossaryOp", () => {
   it("edit op persists to the folder file", () => {
     const folder = tmpFolder();
     saveSeriesGlossary(folder, [{ ...e("Neo", "person"), translation: "尼奧" }]);
-    const { terms } = applyGlossaryOp(folder, {
+    const { terms, excluded } = applyGlossaryOp(folder, {
       type: "edit",
       term: "Neo",
       translation: "尼歐",
     });
     expect(terms[0].translation).toBe("尼歐");
+    expect(excluded).toEqual([]);
     expect(loadSeriesGlossary(folder).terms[0]).toMatchObject({
       translation: "尼歐",
       userEdited: true,
@@ -247,8 +248,9 @@ describe("applyGlossaryOp", () => {
   it("delete op persists terms and excluded", () => {
     const folder = tmpFolder();
     saveSeriesGlossary(folder, [e("Neo", "person")]);
-    const { terms } = applyGlossaryOp(folder, { type: "delete", term: "Neo" });
+    const { terms, excluded } = applyGlossaryOp(folder, { type: "delete", term: "Neo" });
     expect(terms).toEqual([]);
+    expect(excluded).toEqual(["neo"]);
     expect(loadSeriesGlossary(folder).excluded).toEqual(["neo"]);
   });
 

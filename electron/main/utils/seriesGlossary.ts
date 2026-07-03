@@ -149,7 +149,7 @@ export function deleteGlossaryTerm(
 export function applyGlossaryOp(
   folder: string,
   op: GlossaryOp
-): { terms: SeriesGlossaryEntry[] } {
+): { terms: SeriesGlossaryEntry[]; excluded: string[] } {
   const data = loadSeriesGlossary(folder);
   const next =
     op.type === "edit"
@@ -160,5 +160,5 @@ export function applyGlossaryOp(
       throw new Error("Failed to write series glossary");
     }
   }
-  return { terms: next.terms };
+  return { terms: next.terms, excluded: next.excluded };
 }
