@@ -92,3 +92,38 @@ it("second run retranslates only the previously failed line", async () => {
     vi.mocked(translate.analyzeSubtitlesForContext).mock.calls.length;
   expect(analyzeCallsSecondRun).toBeLessThanOrEqual(3); // 僅第一輪的 3 段
 });
+
+it("retranslates everything when the existing output is already complete", async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "stx-redo-"));
+  const file = path.join(dir, "movie.srt");
+  fs.writeFileSync(file, SRT, "utf8");
+
+  // 第一輪：全部成功
+  vi.mocked(translate.translateSubtitleChunk).mockReset()
+    .mockImplementation(async (subs: string[]) => subs.map((s) => `T:${s}`));
+  vi.mocked(translate.translateSubtitleSingle).mockReset()
+    .mockImplementation(async (s: string) => `T:${s}`);
+
+  await translateFile({ path: file, name: "movie.srt" }, BASE_PARAMS, () => {});
+  const outPath = file.replace(/\.srt$/, ".translated.srt");
+  expect(fs.readFileSync(outPath, "utf8")).toContain("T:Hello");
+
+  // 第二輪：對已完成的檔案再次按下翻譯 = 重做（例如套用編輯後的詞彙表），
+  // 不得因 resume 預填而變成 no-op
+  vi.mocked(translate.translateSubtitleChunk).mockReset()
+    .mockImplementation(async (subs: string[]) => subs.map((s) => `R:${s}`));
+  vi.mocked(translate.translateSubtitleSingle).mockReset()
+    .mockImplementation(async (s: string) => `R:${s}`);
+
+  const events: any[] = [];
+  await translateFile({ path: file, name: "movie.srt" }, BASE_PARAMS, (e) =>
+    events.push(e)
+  );
+
+  expect(events[events.length - 1].status).toBe("done");
+  const out = fs.readFileSync(outPath, "utf8");
+  expect(out).toContain("R:Hello");
+  expect(out).toContain("R:World");
+  expect(out).toContain("R:Again");
+  expect(out).not.toContain("T:Hello");
+});
