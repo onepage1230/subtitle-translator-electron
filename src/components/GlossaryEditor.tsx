@@ -32,11 +32,16 @@ export default function GlossaryEditor({
   const [confirmTerm, setConfirmTerm] = useState<string | null>(null);
   const [dirty, setDirty] = useState(false);
   const [error, setError] = useState(false);
+  // 使用者曾刪除過條目（跨 session 由 excluded 得知），避免清空後誤退回唯讀 fallback
+  const [everExcluded, setEverExcluded] = useState(false);
+  // Enter/Escape 卸載 input 時 Chromium 會補發一次 blur，用 ref 跳過重複 commit
+  const skipBlurRef = useRef(false);
 
   const reload = async () => {
     try {
       const result = await ipcRenderer.invoke("get-series-glossary", filePath);
       setTerms(result.terms);
+      setEverExcluded((result.excluded?.length ?? 0) > 0);
     } catch {
       setTerms([]);
     }
@@ -68,15 +73,17 @@ export default function GlossaryEditor({
   };
 
   const commitEdit = (term: string) => {
+    setEditingTerm(null);
+    if (isTranslating) return; // 進入編輯後才開始翻譯：關閉輸入框，不送出
     const value = editValue.trim();
     const current = terms.find((x) => x.term === term);
-    setEditingTerm(null);
     if (!value || !current || value === current.translation) return;
     applyOp({ type: "edit", term, translation: value });
   };
 
-  // series glossary 為空 → 退回現行唯讀顯示（行為與改動前相同）
-  if (terms.length === 0) {
+  // series glossary 從未有過內容 → 退回現行唯讀顯示（行為與改動前相同）
+  // dirty / everExcluded 表示使用者刪過條目，清空時仍顯示可編輯的空系列詞彙表
+  if (terms.length === 0 && !dirty && !everExcluded) {
     if (fallbackGlossary.length === 0) return null;
     return (
       <>
@@ -121,10 +128,22 @@ export default function GlossaryEditor({
                 value={editValue}
                 onChange={(e) => setEditValue(e.target.value)}
                 onKeyDown={(e) => {
-                  if (e.key === "Enter") commitEdit(g.term);
-                  if (e.key === "Escape") setEditingTerm(null);
+                  if (e.key === "Enter") {
+                    skipBlurRef.current = true;
+                    commitEdit(g.term);
+                  }
+                  if (e.key === "Escape") {
+                    skipBlurRef.current = true;
+                    setEditingTerm(null);
+                  }
                 }}
-                onBlur={() => commitEdit(g.term)}
+                onBlur={() => {
+                  if (skipBlurRef.current) {
+                    skipBlurRef.current = false;
+                    return;
+                  }
+                  commitEdit(g.term);
+                }}
               />
             ) : (
               <span
@@ -133,6 +152,7 @@ export default function GlossaryEditor({
                 }
                 onClick={() => {
                   if (isTranslating) return;
+                  skipBlurRef.current = false;
                   setEditingTerm(g.term);
                   setEditValue(g.translation);
                 }}
@@ -142,7 +162,8 @@ export default function GlossaryEditor({
             )}
             {confirmTerm === g.term ? (
               <button
-                className="text-red-500 text-xs font-medium"
+                disabled={isTranslating}
+                className="text-red-500 text-xs font-medium disabled:opacity-30"
                 onClick={() => {
                   setConfirmTerm(null);
                   applyOp({ type: "delete", term: g.term });

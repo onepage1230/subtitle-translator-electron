@@ -248,7 +248,8 @@ ipcMain.handle("get-subtitle-preview", async (event, filePath) => {
 
 // 系列詞彙表讀寫：renderer 傳檔案路徑，main 以其所在資料夾為準
 ipcMain.handle("get-series-glossary", async (_, filePath: string) => {
-  return { terms: loadSeriesGlossary(path.dirname(filePath)).terms };
+  const { terms, excluded } = loadSeriesGlossary(path.dirname(filePath));
+  return { terms, excluded };
 });
 
 ipcMain.handle(
