@@ -74,7 +74,9 @@ LOCKED 機制不需修改:series glossary 內的條目本來就是 reconciliatio
 ### `get-series-glossary`
 
 - 參數:`filePath`(main 以 `path.dirname` 取資料夾,路徑邏輯不外洩到 renderer)。
-- 回傳:`{ terms: GlossaryEntry[] }`。檔案不存在回 `{ terms: [] }`。
+- 回傳:`{ terms: GlossaryEntry[], excluded: string[] }`。檔案不存在回空陣列。
+  (實作時修訂:`excluded` 供 UI 判別「使用者清空過詞彙表」與「從未建立」——
+  前者不得退回唯讀 fallback 顯示,否則刪光條目後會看到過期的分析快照。)
 
 ### `update-series-glossary`
 
