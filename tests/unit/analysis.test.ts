@@ -255,4 +255,19 @@ describe("filterGlossaryForText", () => {
     expect(filterGlossaryForText([], ["Neo"])).toEqual([]);
     expect(filterGlossaryForText([g("Neo")], ["", "  "])).toEqual([]);
   });
+
+  it("matches hyphenation variants in both directions", () => {
+    // term 無連字號、原文有：實測回歸案例（Hye-in → Hyein）
+    expect(
+      filterGlossaryForText([g("Hyein")], ["only Baek Seobang knows that Hye-in is sick"])
+    ).toHaveLength(1);
+    // term 有連字號、原文無
+    expect(
+      filterGlossaryForText([g("Baek Hyun-woo")], ["Baek Hyunwoo appears"])
+    ).toHaveLength(1);
+  });
+
+  it("hyphen normalization does not weaken boundary protection", () => {
+    expect(filterGlossaryForText([g("Bae")], ["Baek Hyun-woo appears"])).toEqual([]);
+  });
 });

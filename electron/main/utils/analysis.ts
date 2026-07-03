@@ -41,18 +41,27 @@ function formatAnalysisContext(analysis: AnalysisResult): string {
 // 每個 chunk 只送出現在該段文字中的詞條：誤含便宜、漏掉昂貴，匹配從寬——
 // 首尾皆英數的 term 用 \b 邊界避免子字串誤中（Bae 不中 Baek，變格如
 // Hyunwoo's 因界符為非字元仍命中），其他（CJK 等）用 substring。
+// 連字號拼法變體（Hye-in vs Hyein、Hyun-woo vs Hyunwoo）：主匹配失敗時
+// 兩邊都去掉連字號再比一次。
 function filterGlossaryForText(
   glossary: GlossaryEntry[],
   texts: string[]
 ): GlossaryEntry[] {
   const haystack = texts.join("\n").toLowerCase();
   if (!haystack.trim() || glossary.length === 0) return [];
+  const haystackNoHyphen = haystack.replace(/-/g, "");
+  const boundMatch = (term: string, hay: string) => {
+    const escaped = term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    return new RegExp(`\\b${escaped}\\b`).test(hay);
+  };
   return glossary.filter((g) => {
     const term = g.term.trim().toLowerCase();
     if (!term) return false;
     if (/^[a-z0-9]/.test(term) && /[a-z0-9]$/.test(term)) {
-      const escaped = term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-      return new RegExp(`\\b${escaped}\\b`).test(haystack);
+      return (
+        boundMatch(term, haystack) ||
+        boundMatch(term.replace(/-/g, ""), haystackNoHyphen)
+      );
     }
     return haystack.includes(term);
   });
