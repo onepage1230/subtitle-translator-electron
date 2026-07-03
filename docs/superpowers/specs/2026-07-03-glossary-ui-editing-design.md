@@ -58,6 +58,8 @@ renderer 不持有待儲存狀態、不做樂觀更新;所有業務規則(排除
     時不套用,回傳原資料。
   - `deleteGlossaryTerm(data, term)`:從 `terms` 移除該條目,term(lowercase)
     加入 `excluded`。重複刪除為 no-op。
+  - 兩者以 lowercase 比對 term 的前提:`terms` 內不存在僅大小寫不同的重複條目,
+    此不變量由 `mergeIntoSeriesGlossary` 的去重鍵(既有行為)保證。
 
 ### 與既有機制的互動
 
@@ -100,6 +102,9 @@ type GlossaryOp =
 
 - modal 開啟時呼叫 `get-series-glossary`,結果存 `seriesGlossary` state;
   plot summary 維持現狀來自 `selectedAnalysis`。
+- modal 開啟期間若 `isTranslating` 由 true 轉 false(翻譯結束),重新呼叫
+  `get-series-glossary` 更新顯示——翻譯過程中 pipeline 會合併寫入新條目,
+  不重讀會讓使用者對著過期清單操作。
 - `seriesGlossary.terms` 非空 → 顯示可編輯的系列詞彙表,區塊標題改為「系列詞彙表」。
 - 為空(只分析過、未翻譯過的舊資料)→ 退回現行唯讀顯示 `selectedAnalysis.glossary`,
   行為與現在相同。
@@ -115,7 +120,9 @@ type GlossaryOp =
 
 ### 狀態控制
 
-- `isTranslating` 時編輯與刪除 disabled。
+- `isTranslating` 時編輯與刪除 disabled。此旗標是全域的:任何批次在跑,
+  所有資料夾的編輯都停用(即使正在翻的是別的資料夾)——刻意選粗粒度換簡單,
+  不做每資料夾追蹤。
 - 本次 modal 開啟期間有過成功修改,詞彙表區底部顯示提示:
   「已更新系列詞彙表;已翻譯的檔案需重新翻譯才會套用新譯名」。
 
