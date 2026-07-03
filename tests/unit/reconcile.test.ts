@@ -71,3 +71,75 @@ describe("reconcileGlossary", () => {
     ]);
   });
 });
+
+// 小模型常把調和結果回成扁平 map（{"term": "譯名 (category)"}）而非
+// { glossary: [...] }，schema 驗證失敗。shape-repair 從錯誤附帶的原始
+// 文字解析這種固定形狀，救回本地模型的調和能力。
+describe("reconcileGlossary shape repair", () => {
+  const schemaError = (text: string) =>
+    Object.assign(new Error("No object generated: response did not match schema."), {
+      text,
+    });
+
+  it("repairs a flat term→'translation (category)' map", async () => {
+    generateObjectMock.mockRejectedValue(
+      schemaError(
+        JSON.stringify({
+          "Baek Hyun-woo": "白賢祐 (person)",
+          "J Hotel": "J酒店 (place)",
+        })
+      )
+    );
+    const result = await reconcileGlossary(NEW_ENTRIES, LOCKED, OPTS);
+    expect(result).toEqual([
+      { term: "Baek Hyun-woo", translation: "白賢祐", category: "person" },
+      { term: "J Hotel", translation: "J酒店", category: "place" },
+    ]);
+  });
+
+  it("falls back to the input entry's category when the value has no suffix", async () => {
+    generateObjectMock.mockRejectedValue(
+      schemaError(JSON.stringify({ "Baek Hyun-woo": "白賢祐" }))
+    );
+    const result = await reconcileGlossary(NEW_ENTRIES, LOCKED, OPTS);
+    expect(result).toEqual([
+      { term: "Baek Hyun-woo", translation: "白賢祐", category: "person" },
+    ]);
+  });
+
+  it("unwraps a glossary-keyed flat map", async () => {
+    generateObjectMock.mockRejectedValue(
+      schemaError(JSON.stringify({ glossary: { "Baek Hyun-woo": "白賢祐 (person)" } }))
+    );
+    const result = await reconcileGlossary(NEW_ENTRIES, LOCKED, OPTS);
+    expect(result).toEqual([
+      { term: "Baek Hyun-woo", translation: "白賢祐", category: "person" },
+    ]);
+  });
+
+  it("accepts a bare entry array missing the wrapper object", async () => {
+    generateObjectMock.mockRejectedValue(
+      schemaError(
+        JSON.stringify([{ term: "Baek Hyun-woo", translation: "白賢祐", category: "person" }])
+      )
+    );
+    const result = await reconcileGlossary(NEW_ENTRIES, LOCKED, OPTS);
+    expect(result).toEqual([
+      { term: "Baek Hyun-woo", translation: "白賢祐", category: "person" },
+    ]);
+  });
+
+  it("rethrows when the raw text is not repairable", async () => {
+    generateObjectMock.mockRejectedValue(schemaError("sorry, I cannot do that"));
+    await expect(reconcileGlossary(NEW_ENTRIES, LOCKED, OPTS)).rejects.toThrow(
+      "did not match schema"
+    );
+  });
+
+  it("rethrows errors that carry no raw text (e.g. network failures)", async () => {
+    generateObjectMock.mockRejectedValue(new Error("ECONNREFUSED"));
+    await expect(reconcileGlossary(NEW_ENTRIES, LOCKED, OPTS)).rejects.toThrow(
+      "ECONNREFUSED"
+    );
+  });
+});
