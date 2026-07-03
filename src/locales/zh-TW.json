@@ -111,7 +111,12 @@
       "context": {
         "title": "內容脈絡",
         "plot_summary": "劇情摘要",
-        "glossary": "詞彙表"
+        "glossary": "詞彙表",
+        "series_glossary": "系列詞彙表",
+        "user_edited": "使用者修改過，譯名已鎖定",
+        "confirm_delete": "確認刪除？",
+        "retranslate_hint": "已更新系列詞彙表；已翻譯的檔案需重新翻譯才會套用新譯名",
+        "save_error": "寫入詞彙表失敗，請檢查資料夾權限"
       },
       "not_translated_yet": "尚未翻譯",
       "line_failed": "翻譯失敗",

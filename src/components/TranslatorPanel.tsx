@@ -12,6 +12,7 @@ import { toast } from "react-toastify";
 import InputField from "@/components/InputField";
 import TextareaField from "@/components/TextareaField";
 import Button from "@/components/Button";
+import GlossaryEditor from "@/components/GlossaryEditor";
 import { getFilePath } from "@/utils/filePath";
 import { makeKey } from "../../electron/shared/subtitleKey";
 
@@ -539,34 +540,29 @@ export default function TranslatorPanel() {
                 </div>
               </div>
               <div className="overflow-x-auto">
-                {selectedAnalysis && (
-                  <div className="mb-4">
-                    <div className="text-md font-semibold mb-1">
-                      {t("translate.context.title")}
-                    </div>
-                    <div className="text-sm font-medium text-slate-700">
-                      {t("translate.context.plot_summary")}
-                    </div>
-                    <p className="text-sm whitespace-pre-wrap mb-2">
-                      {selectedAnalysis.plotSummary}
-                    </p>
-                    {selectedAnalysis.glossary.length > 0 && (
-                      <>
-                        <div className="text-sm font-medium text-slate-700">
-                          {t("translate.context.glossary")}
-                        </div>
-                        <ul className="text-sm mt-1 space-y-0.5">
-                          {selectedAnalysis.glossary.map((g, i) => (
-                            <li key={i}>
-                              <span className="font-medium">{g.term}</span>: {g.translation}
-                            </li>
-                          ))}
-                        </ul>
-                      </>
-                    )}
-                    <hr className="my-2" />
-                  </div>
-                )}
+                <div className="mb-4">
+                  {selectedAnalysis && (
+                    <>
+                      <div className="text-md font-semibold mb-1">
+                        {t("translate.context.title")}
+                      </div>
+                      <div className="text-sm font-medium text-slate-700">
+                        {t("translate.context.plot_summary")}
+                      </div>
+                      <p className="text-sm whitespace-pre-wrap mb-2">
+                        {selectedAnalysis.plotSummary}
+                      </p>
+                    </>
+                  )}
+                  {selectedFile && (
+                    <GlossaryEditor
+                      filePath={selectedFile.path}
+                      isTranslating={isTranslating}
+                      fallbackGlossary={selectedAnalysis?.glossary ?? []}
+                    />
+                  )}
+                  <hr className="my-2" />
+                </div>
                 {cues.map((cue: any, index: number) => {
                   const isFailed = failedKeySet.has(makeKey(cue.start, cue.end));
                   return (

@@ -111,7 +111,12 @@
       "context": {
         "title": "内容上下文",
         "plot_summary": "剧情摘要",
-        "glossary": "词汇表"
+        "glossary": "词汇表",
+        "series_glossary": "系列词汇表",
+        "user_edited": "用户修改过，译名已锁定",
+        "confirm_delete": "确认删除？",
+        "retranslate_hint": "已更新系列词汇表；已翻译的文件需重新翻译才会应用新译名",
+        "save_error": "写入词汇表失败，请检查文件夹权限"
       },
       "not_translated_yet": "尚未翻译",
       "line_failed": "翻译失败",

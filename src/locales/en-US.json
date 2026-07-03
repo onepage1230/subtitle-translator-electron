@@ -111,7 +111,12 @@
       "context": {
         "title": "Context",
         "plot_summary": "Plot summary",
-        "glossary": "Glossary"
+        "glossary": "Glossary",
+        "series_glossary": "Series glossary",
+        "user_edited": "Edited by user — translation locked",
+        "confirm_delete": "Delete?",
+        "retranslate_hint": "Series glossary updated; re-translate finished files to apply the new names",
+        "save_error": "Failed to write glossary file — check folder permissions"
       },
       "not_translated_yet": "Not translated yet",
       "line_failed": "Translation failed",
