@@ -321,6 +321,63 @@ async function synthesizePlotSummaries(
   return result.text;
 }
 
+// 小模型常把調和結果回成扁平 map（{"term": "譯名 (category)"}）而非 schema
+// 要求的 { glossary: [...] }，導致驗證失敗。這裡從錯誤附帶的原始文字解析
+// 幾種固定的錯誤形狀；修復結果仍會經過 enforceReconciliation 的防護
+// （LOCKED 還原、發明條目丟棄），所以寬鬆解析是安全的。
+function repairReconciledGlossary(
+  rawText: string,
+  knownEntries: GlossaryEntry[]
+): GlossaryEntry[] | null {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(rawText);
+  } catch {
+    return null;
+  }
+  // 有 glossary 包裹但內容形狀錯誤 → 拆掉外層再解析
+  if (
+    parsed &&
+    typeof parsed === "object" &&
+    !Array.isArray(parsed) &&
+    (parsed as Record<string, unknown>).glossary !== undefined
+  ) {
+    parsed = (parsed as Record<string, unknown>).glossary;
+  }
+  // 裸的條目陣列（少了包裹物件）
+  if (Array.isArray(parsed)) {
+    const entries = parsed.filter(
+      (e: any) =>
+        e && typeof e.term === "string" && typeof e.translation === "string"
+    );
+    return entries.length
+      ? entries.map((e: any) => ({ ...e, category: e.category ?? "term" }))
+      : null;
+  }
+  if (!parsed || typeof parsed !== "object") return null;
+  // 扁平 map：值為「譯名」或「譯名 (category)」；category 缺漏時沿用輸入條目的
+  const categoryByTerm = new Map(
+    knownEntries.map((e) => [e.term.toLowerCase(), e.category])
+  );
+  const entries: GlossaryEntry[] = [];
+  for (const [term, value] of Object.entries(
+    parsed as Record<string, unknown>
+  )) {
+    if (typeof value !== "string" || !value.trim()) return null;
+    const m = value
+      .trim()
+      .match(/^(.*?)\s*[（(]\s*(person|place|organization|term)\s*[）)]$/i);
+    const translation = (m ? m[1] : value).trim();
+    if (!translation) return null;
+    const category =
+      (m?.[2].toLowerCase() as GlossaryCategory | undefined) ??
+      categoryByTerm.get(term.toLowerCase()) ??
+      "term";
+    entries.push({ term, translation, category });
+  }
+  return entries.length ? entries : null;
+}
+
 async function reconcileGlossary(
   newEntries: GlossaryEntry[],
   lockedEntries: GlossaryEntry[],
@@ -350,22 +407,34 @@ async function reconcileGlossary(
     ? `LOCKED entries (translations are final, do NOT change them):\n${formatEntries(lockedEntries)}\n\n`
     : "";
 
-  const { object } = await generateObject({
-    model: ai(model),
-    temperature,
-    schema: z.object({ glossary: z.array(glossaryEntrySchema) }),
-    system: `You are a glossary reconciler for a subtitle translation system.
+  try {
+    const { object } = await generateObject({
+      model: ai(model),
+      temperature,
+      schema: z.object({ glossary: z.array(glossaryEntrySchema) }),
+      system: `You are a glossary reconciler for a subtitle translation system.
 Different surface forms often refer to the same person: romanization variants of the same name, a full name vs. a given name only, or nicknames.
 Rules:
 1. Never change the translation of a LOCKED entry.
 2. Romanization variants of the same name must share the identical translation.
 3. A given-name-only or nickname form must match the corresponding part of the full name's ${lang} translation.
 4. Return ALL provided entries with corrected translations. Do NOT invent entries that were not provided.`,
-    prompt: `${lockedSection}NEW entries to reconcile:\n${formatEntries(newEntries)}`,
-    maxRetries: 2,
-  });
-
-  return object.glossary;
+      prompt: `${lockedSection}NEW entries to reconcile:\n${formatEntries(newEntries)}`,
+      maxRetries: 2,
+    });
+    return object.glossary;
+  } catch (err: any) {
+    // schema 驗證失敗時，錯誤會帶著模型的原始回應文字（NoObjectGeneratedError.text）
+    const rawText = typeof err?.text === "string" ? err.text : undefined;
+    const repaired = rawText
+      ? repairReconciledGlossary(rawText, [...lockedEntries, ...newEntries])
+      : null;
+    if (!repaired) throw err;
+    console.warn(
+      "Glossary reconciliation schema mismatch; repaired flat-shape response."
+    );
+    return repaired;
+  }
 }
 
 export type { AnalysisResult, GlossaryCategory, GlossaryEntry };
