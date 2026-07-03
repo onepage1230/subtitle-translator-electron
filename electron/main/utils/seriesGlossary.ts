@@ -112,3 +112,53 @@ export function saveSeriesGlossary(
     return false;
   }
 }
+
+export type GlossaryOp =
+  | { type: "edit"; term: string; translation: string }
+  | { type: "delete"; term: string };
+
+export function editGlossaryTranslation(
+  data: SeriesGlossaryData,
+  term: string,
+  translation: string
+): SeriesGlossaryData {
+  const trimmed = translation.trim();
+  if (!trimmed) return data; // 空譯名不套用
+  const key = term.toLowerCase();
+  const index = data.terms.findIndex((t) => t.term.toLowerCase() === key);
+  if (index === -1) return data; // 找不到不套用
+  const terms = data.terms.slice();
+  terms[index] = { ...terms[index], translation: trimmed, userEdited: true };
+  return { terms, excluded: data.excluded };
+}
+
+export function deleteGlossaryTerm(
+  data: SeriesGlossaryData,
+  term: string
+): SeriesGlossaryData {
+  const key = term.toLowerCase();
+  const terms = data.terms.filter((t) => t.term.toLowerCase() !== key);
+  const excluded = data.excluded.includes(key)
+    ? data.excluded
+    : [...data.excluded, key];
+  return { terms, excluded };
+}
+
+// IPC handler 的完整流程：load → 套用 → save。驗證未通過時回傳現況、不寫檔；
+// 寫檔失敗 throw 讓 renderer 顯示錯誤。
+export function applyGlossaryOp(
+  folder: string,
+  op: GlossaryOp
+): { terms: SeriesGlossaryEntry[] } {
+  const data = loadSeriesGlossary(folder);
+  const next =
+    op.type === "edit"
+      ? editGlossaryTranslation(data, op.term, op.translation)
+      : deleteGlossaryTerm(data, op.term);
+  if (next !== data) {
+    if (!saveSeriesGlossary(folder, next.terms, next.excluded)) {
+      throw new Error("Failed to write series glossary");
+    }
+  }
+  return { terms: next.terms };
+}

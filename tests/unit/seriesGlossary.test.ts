@@ -7,6 +7,9 @@ import {
   mergeIntoSeriesGlossary,
   saveSeriesGlossary,
   enforceReconciliation,
+  editGlossaryTranslation,
+  deleteGlossaryTerm,
+  applyGlossaryOp,
   SERIES_GLOSSARY_FILE,
   SERIES_GLOSSARY_CAP,
 } from "../../electron/main/utils/seriesGlossary";
@@ -167,5 +170,110 @@ describe("enforceReconciliation", () => {
     const result = enforceReconciliation(reconciled, originals, locked);
     expect(result).toHaveLength(2);
     expect(result).toContainEqual(p("hyein", "惠仁"));
+  });
+});
+
+describe("editGlossaryTranslation", () => {
+  const data = () => ({
+    terms: [{ term: "Baek Hyun-woo", translation: "白賢宇", category: "person" as const }],
+    excluded: [] as string[],
+  });
+
+  it("updates translation and marks userEdited", () => {
+    const next = editGlossaryTranslation(data(), "Baek Hyun-woo", "白賢祐");
+    expect(next.terms[0]).toEqual({
+      term: "Baek Hyun-woo",
+      translation: "白賢祐",
+      category: "person",
+      userEdited: true,
+    });
+  });
+
+  it("matches term case-insensitively", () => {
+    const next = editGlossaryTranslation(data(), "baek hyun-woo", "白賢祐");
+    expect(next.terms[0].translation).toBe("白賢祐");
+  });
+
+  it("returns same object when translation is blank", () => {
+    const d = data();
+    expect(editGlossaryTranslation(d, "Baek Hyun-woo", "   ")).toBe(d);
+  });
+
+  it("returns same object when term not found", () => {
+    const d = data();
+    expect(editGlossaryTranslation(d, "Nobody", "誰")).toBe(d);
+  });
+
+  it("trims the new translation", () => {
+    const next = editGlossaryTranslation(data(), "Baek Hyun-woo", " 白賢祐 ");
+    expect(next.terms[0].translation).toBe("白賢祐");
+  });
+});
+
+describe("deleteGlossaryTerm", () => {
+  it("removes the entry and records lowercase term in excluded", () => {
+    const next = deleteGlossaryTerm(
+      { terms: [e("Neo", "person"), e("Trinity", "person")], excluded: [] },
+      "Neo"
+    );
+    expect(next.terms.map((x) => x.term)).toEqual(["Trinity"]);
+    expect(next.excluded).toEqual(["neo"]);
+  });
+
+  it("is a no-op on repeated delete", () => {
+    const once = deleteGlossaryTerm({ terms: [e("Neo")], excluded: [] }, "Neo");
+    const twice = deleteGlossaryTerm(once, "neo");
+    expect(twice.terms).toEqual([]);
+    expect(twice.excluded).toEqual(["neo"]);
+  });
+});
+
+describe("applyGlossaryOp", () => {
+  it("edit op persists to the folder file", () => {
+    const folder = tmpFolder();
+    saveSeriesGlossary(folder, [{ ...e("Neo", "person"), translation: "尼奧" }]);
+    const { terms } = applyGlossaryOp(folder, {
+      type: "edit",
+      term: "Neo",
+      translation: "尼歐",
+    });
+    expect(terms[0].translation).toBe("尼歐");
+    expect(loadSeriesGlossary(folder).terms[0]).toMatchObject({
+      translation: "尼歐",
+      userEdited: true,
+    });
+  });
+
+  it("delete op persists terms and excluded", () => {
+    const folder = tmpFolder();
+    saveSeriesGlossary(folder, [e("Neo", "person")]);
+    const { terms } = applyGlossaryOp(folder, { type: "delete", term: "Neo" });
+    expect(terms).toEqual([]);
+    expect(loadSeriesGlossary(folder).excluded).toEqual(["neo"]);
+  });
+
+  it("no-op edit does not rewrite the file", () => {
+    const folder = tmpFolder();
+    saveSeriesGlossary(folder, [e("Neo", "person")]);
+    const before = fs.statSync(path.join(folder, SERIES_GLOSSARY_FILE)).mtimeMs;
+    applyGlossaryOp(folder, { type: "edit", term: "Nobody", translation: "誰" });
+    const after = fs.statSync(path.join(folder, SERIES_GLOSSARY_FILE)).mtimeMs;
+    expect(after).toBe(before);
+  });
+
+  it("throws when the folder is not writable", () => {
+    const folder = tmpFolder();
+    saveSeriesGlossary(folder, [e("Neo", "person")]);
+    // 在 macOS 上，writeFileSync 可以覆寫已存在的檔案即使資料夾是唯讀
+    // 所以先刪檔再設 chmod，確保新寫入會失敗
+    fs.unlinkSync(path.join(folder, SERIES_GLOSSARY_FILE));
+    fs.chmodSync(folder, 0o500); // 唯讀資料夾
+    try {
+      expect(() =>
+        applyGlossaryOp(folder, { type: "delete", term: "Neo" })
+      ).toThrow("Failed to write series glossary");
+    } finally {
+      fs.chmodSync(folder, 0o700);
+    }
   });
 });
