@@ -5,7 +5,7 @@ import { makeKey } from "../../shared/subtitleKey";
 import type { AnalysisResult } from "./translate";
 import { translateSubtitleChunk, translateSubtitleSingle, reconcileGlossary } from "./translate";
 import { splitIntoChunk, parseSubtitle, saveTranslated, normalizeCues } from "./subtitle";
-import { hashContent, analysisCachePath, getOrCreateAnalysis, formatAnalysisContext, alignPlotSummaryWithGlossary } from "./analysis";
+import { hashContent, analysisCachePath, getOrCreateAnalysis, formatAnalysisContext, alignPlotSummaryWithGlossary, filterGlossaryForText } from "./analysis";
 import {
   loadSeriesGlossary,
   mergeIntoSeriesGlossary,
@@ -177,7 +177,7 @@ export async function translateFile(
       .map((cue: any) => (cue && cue.data ? cue.data.text : ""))
       .filter((t: string) => t && t.length > 0);
 
-    let combinedAdditional = params.additional || "";
+    const baseAdditional = params.additional || "";
     let analysisData: AnalysisResult | null = null;
 
     const folder = path.dirname(file.path);
@@ -235,12 +235,21 @@ export async function translateFile(
           combinedGlossary
         );
         analysisData = { plotSummary: alignedSummary, glossary: combinedGlossary };
-        combinedAdditional = `${combinedAdditional ? combinedAdditional + "\n\n" : ""}${formatAnalysisContext(analysisData)}`;
         onProgress({ filePath: file.path, progress: 4, status: "analyzing", totalCues, currentCue: 0, analysis: analysisData });
       }
     } catch (analysisErr) {
       console.warn("Context analysis failed, continue without it:", analysisErr);
     }
+
+    // 每個請求只送命中的詞條：摘要全量，詞彙表按該段文字過濾（spec:
+    // docs/superpowers/specs/2026-07-03-per-chunk-glossary-filtering-design.md）
+    const contextFor = (texts: string[]) =>
+      analysisData
+        ? `${baseAdditional ? baseAdditional + "\n\n" : ""}${formatAnalysisContext({
+            plotSummary: analysisData.plotSummary,
+            glossary: filterGlossaryForText(analysisData.glossary, texts),
+          })}`
+        : baseAdditional;
 
     onProgress({
       filePath: file.path,
@@ -299,7 +308,7 @@ export async function translateFile(
                   model: params.model || "",
                   prompt: params.prompt || "",
                   lang: params.lang || "",
-                  additional: combinedAdditional || "",
+                  additional: contextFor(windowText),
                   temperature: attemptTemp,
                 }),
               windowText
@@ -338,7 +347,7 @@ export async function translateFile(
                     model: params.model || "",
                     prompt: params.prompt || "",
                     lang: params.lang || "",
-                    additional: combinedAdditional || "",
+                    additional: contextFor([lineText]),
                     temperature:
                       typeof params.temperature === "number"
                         ? params.temperature
@@ -441,7 +450,7 @@ export async function translateFile(
                 model: params.model || "",
                 prompt: params.prompt || "",
                 lang: params.lang || "",
-                additional: combinedAdditional || "",
+                additional: contextFor([cue.data.text]),
                 temperature: params.temperature || 1,
               }),
             cue.data.text
