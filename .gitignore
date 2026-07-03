@@ -31,3 +31,10 @@ yarn.lock
 /test-results/
 /playwright-report/
 /playwright/.cache/
+
+# Claude Code local tooling (session-local, not part of the app)
+/.agents/
+/.claude/
+/.codegraph/
+/.superpowers/
+skills-lock.json
