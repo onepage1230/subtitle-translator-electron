@@ -151,6 +151,22 @@ export async function translateFile(
             cue.data.translatedText = existingText;
           }
         });
+        // 完成檔重翻 = 全新重翻：resume 只服務「中斷續翻」。若預填後已無待翻句，
+        // 代表使用者對已完成的檔案再次按下翻譯，意圖是重做（例如套用編輯後的
+        // 詞彙表），清掉預填讓整份重翻；否則會因 splitIntoChunk 跳過已翻句而
+        // 變成 no-op。（邊界：譯文恰好等於原文的句子不算已翻，含此類句子的
+        // 完成檔仍走 resume——罕見，遇到可刪 .translated 檔強制重翻。）
+        const remaining = subtitle.filter(
+          (cue: any) =>
+            cue?.data &&
+            String(cue.data.text ?? "").trim() &&
+            !cue.data.translatedText
+        ).length;
+        if (remaining === 0) {
+          subtitle.forEach((cue: any) => {
+            if (cue?.data) delete cue.data.translatedText;
+          });
+        }
       } catch (resumeErr) {
         console.warn("Resume pre-population failed, starting fresh:", resumeErr);
       }
