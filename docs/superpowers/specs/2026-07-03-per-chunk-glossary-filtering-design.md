@@ -55,8 +55,13 @@ const contextFor = (texts: string[]) =>
     : baseAdditional;
 ```
 
-- chunkProcessor:`additional: contextFor(windowText)`(windowText = 核心 ±5 句)。
-- 單行 fallback 與失敗行重試:`additional: contextFor([該行原文])`。
+- `combinedAdditional` 現有**三個**使用點,全部改為 `contextFor`:
+  1. chunkProcessor 的 chunk 翻譯(現 `pipeline.ts:302`):`contextFor(windowText)`
+     (windowText = 核心 ±5 句)。
+  2. chunk 結果錯位時的視窗內逐行修補(現 `pipeline.ts:341`):`contextFor([該行原文])`。
+  3. 檔尾的未翻譯行 fallback 迴圈(現 `pipeline.ts:444`):`contextFor([該行原文])`。
+- 刻意不做 matcher 預編譯:50 詞條 × ~65 chunks 的 RegExp 建構成本微不足道,
+  維持純函式簽名的簡單性。
 - 零詞條命中時 `formatAnalysisContext` 既有行為省略整個 Glossary 區段
   (含權威性指示),只送摘要——已有測試鎖住。
 
