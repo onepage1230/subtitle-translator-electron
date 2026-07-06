@@ -27,7 +27,7 @@ argument-hint: [要找什麼＋為什麼要找]
    不貼程式碼全文；清單超過 30 行寫到檔案回傳路徑。
    ```
 
-3. **派工**：Agent tool，`subagent_type: Explore`，`model: sonnet`。搜尋廣度在 prompt 中註明（一般寫 "medium"；要掃多個目錄與命名變體寫 "very thoroughly"）。
+3. **派工**：Agent tool，`subagent_type: Explore`，`model: sonnet`。搜尋廣度在 prompt 中註明（一般寫 "medium"；要掃多個目錄與命名變體寫 "very thorough"）。
 
 4. **收貨檢查**：回報中每個結論都有 檔案:行號 嗎？沒有的結論不採用，退回補證據（計入重試，上限見 `02-delegation.md` §5）。
 

@@ -3,11 +3,11 @@
 本檔是 ops 制度的事實基礎。後續 01–05 各檔引用的環境事實以本檔為準。
 資料來源：本 session 實際執行 `ls`、`wc -l`、`claude mcp list`，以及 Claude Code 官方文件查證（出處見 §7）。
 
-## 1. CLAUDE.md 現況
+## 1. CLAUDE.md 現況（ops-setup **重寫前**的快照；重寫後狀態見 §9 後記）
 
 | 檔案 | 行數 | 內容摘要 |
 |---|---|---|
-| 專案 `CLAUDE.md` | 96 行 | 指令、架構（main/renderer/IPC）、翻譯 pipeline 九步驟、劇集模式、settings 持久化、字幕格式、build 輸出、agent skills 路由 |
+| 專案 `CLAUDE.md` | 96 行（重寫前） | 指令、架構（main/renderer/IPC）、翻譯 pipeline 九步驟、劇集模式、settings 持久化、字幕格式、build 輸出、agent skills 路由 |
 | `~/.claude/CLAUDE.md` | 13 行 | 語言（繁中）、git 必用、Python 用 pyenv+uv、pnpm 11 打包教訓 |
 
 問題點（詳見 `01-diagnosis.md`）：專案 CLAUDE.md 有大量「可從程式碼推導」的架構細節，且 pipeline 描述每次改功能都要同步維護，容易過時。
@@ -23,7 +23,7 @@
 
 ## 3. .claude/commands/
 
-- 專案 `.claude/commands/`：**不存在**（本次 ops-setup 會建立，見交付項目 E）
+- 專案 `.claude/commands/`：盤點時不存在；**ops-setup 已建立五個派工模板**（`ops-search`、`ops-research`、`ops-implement`、`ops-refactor`、`ops-review`），已進版控
 - `~/.claude/commands/`：不存在
 
 ## 4. Skills
@@ -99,3 +99,13 @@ superpowers 系列（brainstorming、systematic-debugging、test-driven-developm
 - Issue tracker：GitHub Issues（`onepage1230/subtitle-translator-electron`），流程見 `docs/agents/issue-tracker.md`。
 - 記憶系統：`~/.claude/projects/-Users-onepage-Documents-github-subtitle-translator-electron/memory/`（MEMORY.md 索引 + 單事實檔）。
 - 測試：`npm test`（Vitest，tests/unit/）、`npm run e2e`（Playwright，需先 `npm run pree2e`）。
+
+## 9. 後記（ops-setup 完成後的狀態，2026-07-06）
+
+本檔 §1–§6 是 ops-setup **動工前**的快照，作為診斷依據保留原文。動工後的變化：
+
+- 專案 `CLAUDE.md` 已重寫為 ≤60 行的路由表（實測 47 行），原架構細節移至 `docs/ops/10-architecture.md`。
+- `.claude/commands/` 已建立五個 `ops-*` 派工模板並進版控（`.gitignore` 改為 `/.claude/*` + `!/.claude/commands/`）。
+- 新增制度檔：`docs/ops/00`–`05` 與 `10-architecture.md`。
+
+未來更新本檔時：環境事實（skills、agents、MCP、hooks）以最新現況覆寫對應小節即可，不必保留歷史快照；唯 §1 的重寫前行數保留，供 `01-diagnosis.md` 引用。

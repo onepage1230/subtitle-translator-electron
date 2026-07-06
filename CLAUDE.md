@@ -11,7 +11,7 @@ npm test                       # 單元測試（Vitest，tests/unit/）
 npm run pree2e && npm run e2e  # E2E（Playwright，先建測試版）
 ```
 
-沒有 lint script；型別檢查靠 `tsc`（Edit `.ts/.tsx` 後 hook 會自動跑 `npx tsc --noEmit`）。
+沒有 lint script；型別檢查靠 `tsc`（Edit/Write `.ts/.tsx` 後 hook 會自動跑 `npx tsc --noEmit`）。
 
 ## 規則優先序
 
@@ -38,7 +38,7 @@ skills 只在不與制度檔衝突時使用；多個 skill 都像時，查 `docs
 - 執行期需要的套件放 `dependencies`，不放 `devDependencies`（pnpm 11 + electron-builder 打包教訓）。
 - renderer 是 `nodeIntegration: true`、`contextIsolation: false`，可直接 `import { ipcRenderer } from "electron"`。
 - 字幕輸出檔名固定 `<原檔名>.translated.<副檔名>`；支援 `.srt/.vtt/.ass/.ssa`。
-- 制度檔（`docs/ops/`）的 commit 一律用 `ops:` 前綴。
+- 制度檔（`docs/ops/`、本檔、`.claude/commands/ops-*`）的 commit 一律用 `ops:` 前綴。
 
 ## Agent skills
 

@@ -14,7 +14,7 @@
 | 批次機械性修改（同一模式套用到多個檔案） | `general-purpose` agent | 「把 12 個測試檔的 import 路徑改成新格式」 |
 | 產出物驗收（見 §6） | fresh-context `general-purpose` agent | read-back、跑測試、審查 |
 | `translate.ts` 的修改審查 | 專案 agent `translation-pipeline-reviewer` | 任何動到翻譯核心的 diff |
-| 產生 E2E 測試 | 專案 agent `e2e-writer` | 新頁面加測試 |
+| 產生 E2E 測試 | 專案 agent `e2e-writer`（frontmatter 未設 model＝inherit；派工時可用 `model: sonnet` 覆寫） | 新頁面加測試 |
 
 **例外（主對話直接做，不派）**：
 - 「某符號在哪、誰呼叫誰、改了會影響什麼」→ 直接用 codegraph MCP（`codegraph_context`，必要時補一個 `codegraph_explore`），2–3 次呼叫內能答完的不派工。
@@ -61,7 +61,7 @@
 - **Haiku 錯一次 → 直接升 Sonnet。** 不要給 Haiku 第二次機會，除錯成本高於模型價差。
 - **Sonnet 同一子任務連錯兩次 → 升 Opus**，且派工單必須附完整失敗軌跡：兩次分別怎麼做的、輸出什麼、錯在哪、已排除什麼。不附軌跡的升級會讓 Opus 重走一遍死路。
 - **Opus 解出來之後 → 把解法寫成範例（模式 + 一個實際 diff），降回 Sonnet/Haiku 批次套用**到其餘同類位置。
-- **同一件事最多重試兩輪**（含升級在內共三次嘗試）。還是不行就停下來，把失敗軌跡整理給使用者，附上你的判斷：是方向錯了、缺資訊、還是超出能力（判準見 `03-judgment.md` §4）。
+- **嘗試次數上限：以 Sonnet 為起點共三次**（Sonnet 兩次 + Opus 一次）。Haiku 起手的任務，Haiku 那次失敗不計入這三次——升上 Sonnet 後重新照上述計算。三次用完還是不行就停下來，把失敗軌跡整理給使用者，附上你的判斷：是方向錯了、缺資訊、還是超出能力（判準見 `03-judgment.md` §4）。
 
 「錯一次」的定義：驗收條件未達成（測試沒過、回報缺驗收要求的內容、read-back 不符），不是風格不合意。
 
