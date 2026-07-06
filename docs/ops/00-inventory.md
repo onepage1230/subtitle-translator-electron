@@ -16,8 +16,8 @@
 
 | 檔案 | model 欄位 | tools 欄位 | 用途 |
 |---|---|---|---|
-| `e2e-writer.md`（58 行） | **未設定**（＝inherit） | 未設定（All tools） | 讀 src/pages、src/components 產生 Playwright E2E 測試 |
-| `translation-pipeline-reviewer.md`（58 行） | **未設定**（＝inherit） | 未設定（All tools） | 審查 translate.ts 修改（三層 fallback、重試、atomic write） |
+| `e2e-writer.md` | `sonnet`（2026-07-06 補上） | 未設定（All tools） | 讀 src/pages、src/components 產生 Playwright E2E 測試 |
+| `translation-pipeline-reviewer.md` | `inherit`（2026-07-06 顯式化） | 未設定（All tools） | 審查 translate.ts 修改（三層 fallback、重試、atomic write） |
 
 `~/.claude/agents/`：空。
 

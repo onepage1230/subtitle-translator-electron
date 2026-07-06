@@ -47,7 +47,7 @@
 三個彼此獨立的出錯面：
 
 1. **無驗證合約**：兩個現有 agents（e2e-writer、translation-pipeline-reviewer）沒有 model、tools、回報格式約定；過往流程是「改完自己宣稱完成」，沒有 fresh-context 驗收。弱模型自驗的通病是「跑過 ≠ 對」——tsc 過了就說完成，實際行為沒驗。
-2. **`settings.local.json` 有 `git *` 白名單**：`git reset --hard`、`git push --force` 都免確認直接放行，與本制度 Stop Conditions（破壞性 git 操作先問）直接打架。制度寫了但權限層放行，弱模型一個手滑就繞過。
+2. **`settings.local.json` 有 `git *` 白名單**：`git reset --hard`、`git push --force` 都免確認直接放行，與本制度 Stop Conditions（破壞性 git 操作先問）直接打架。制度寫了但權限層放行，弱模型一個手滑就繞過。（**已解決**：2026-07-06 經使用者授權移除該條目。）
 3. **文件雙源**：CLAUDE.md 的 pipeline 描述與程式碼是兩份真相，歷史上靠人工同步（見第 1 名判斷依據），過時的描述會直接誤導照文件辦事的弱模型。
 
 ### 判斷依據

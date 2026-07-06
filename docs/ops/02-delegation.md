@@ -14,7 +14,7 @@
 | 批次機械性修改（同一模式套用到多個檔案） | `general-purpose` agent | 「把 12 個測試檔的 import 路徑改成新格式」 |
 | 產出物驗收（見 §6） | fresh-context `general-purpose` agent | read-back、跑測試、審查 |
 | `translate.ts` 的修改審查 | 專案 agent `translation-pipeline-reviewer` | 任何動到翻譯核心的 diff |
-| 產生 E2E 測試 | 專案 agent `e2e-writer`（frontmatter 未設 model＝inherit；派工時可用 `model: sonnet` 覆寫） | 新頁面加測試 |
+| 產生 E2E 測試 | 專案 agent `e2e-writer`（frontmatter 已設 `model: sonnet`） | 新頁面加測試 |
 
 **例外（主對話直接做，不派）**：
 - 「某符號在哪、誰呼叫誰、改了會影響什麼」→ 直接用 codegraph MCP（`codegraph_context`，必要時補一個 `codegraph_explore`），2–3 次呼叫內能答完的不派工。
@@ -46,7 +46,7 @@
 | `fable` / `claude-opus-4-8` 等完整 ID | 只在使用者明說要用時 | — |
 | `inherit` | 跟主對話同級。只給「需要與主對話同等判斷力」的審查型 agent | `translation-pipeline-reviewer` |
 
-現有兩個專案 agent 未設 `model` 欄位（＝inherit）。建議值：`e2e-writer` 設 `sonnet`；`translation-pipeline-reviewer` 維持 `inherit`。改 agent 定義檔前先讀 `04-maintenance.md` §1。
+兩個專案 agent 已設定（2026-07-06）：`e2e-writer` 為 `sonnet`；`translation-pipeline-reviewer` 為 `inherit`（顯式）。改 agent 定義檔前先讀 `04-maintenance.md` §1。
 
 ## 4. 回報合約（subagent 的回覆格式）
 

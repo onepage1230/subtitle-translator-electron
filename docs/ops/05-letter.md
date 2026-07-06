@@ -18,7 +18,7 @@ docs/ops/ 的五份檔案**不會自動進入任何 session 的 context**——�
 
 ### 3. auto-memory 與 docs/ops 是兩套記憶，會分叉
 
-auto-memory（`~/.claude/projects/.../memory/`）記個人偏好與跨專案教訓；docs/ops 與 `10-architecture.md` 記 repo 內可版控的事實。今天起的分工：**repo 的事實以 repo 檔案為準**，memory 裡的舊 pipeline 描述若與 `10-architecture.md` 或程式碼衝突，信 repo、更新 memory。另外兩個權限層的既知矛盾，制度管不到、只有使用者能修：(a) `settings.local.json` 有 `git *` 白名單，破壞性 git 操作實際上免確認，與 Stop Conditions 打架；(b) `.claude/hooks/audit.log` 與 `.claude/worktrees/` 下兩個 5/21 的殘留 worktree 無人清理。已在 `01-diagnosis.md` 建議，若使用者尚未處理，適時再提醒一次。
+auto-memory（`~/.claude/projects/.../memory/`）記個人偏好與跨專案教訓；docs/ops 與 `10-architecture.md` 記 repo 內可版控的事實。今天起的分工：**repo 的事實以 repo 檔案為準**，memory 裡的舊 pipeline 描述若與 `10-architecture.md` 或程式碼衝突，信 repo、更新 memory。另外權限層的既知問題：(a) `settings.local.json` 的 `git *` 白名單——**已於 2026-07-06 經使用者授權移除**，破壞性 git 操作回到需確認；(b) `.claude/hooks/audit.log` 與 `.claude/worktrees/` 下兩個 5/21 的殘留 worktree 仍未清理，適時提醒使用者。
 
 ## 這套制度最可能的退化方式與預防
 
