@@ -33,8 +33,10 @@ yarn.lock
 /playwright/.cache/
 
 # Claude Code local tooling (session-local, not part of the app)
+# .claude/ 整體忽略，但 commands/（派工模板）要進版控，見 docs/ops/02-delegation.md
 /.agents/
-/.claude/
+/.claude/*
+!/.claude/commands/
 /.codegraph/
 /.superpowers/
 skills-lock.json
