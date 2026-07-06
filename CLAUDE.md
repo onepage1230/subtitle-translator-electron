@@ -1,96 +1,47 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+字幕翻譯桌面應用（Electron + React + Vite）。本檔只做路由：先看指令與硬規則，其餘照下表找檔案，不要憑印象作答。
 
-## Commands
+## 指令
 
 ```bash
-# Development (starts Vite + Electron together)
-npm run dev
-
-# Build distributable (runs writeVersion.js, tsc, vite build, then electron-builder)
-npm run build
-
-# E2E tests (Playwright)
-npm run pree2e   # build in test mode first
-npm run e2e
-
-# Unit tests (Vitest, test files in tests/unit/)
-npm test
+npm run dev                    # 開發（Vite + Electron 同啟）
+npm run build                  # 打包（writeVersion.js → tsc → vite build → electron-builder）
+npm test                       # 單元測試（Vitest，tests/unit/）
+npm run pree2e && npm run e2e  # E2E（Playwright，先建測試版）
 ```
 
-No lint script is defined; TypeScript type checking is done via `tsc` during build.
+沒有 lint script；型別檢查靠 `tsc`（Edit `.ts/.tsx` 後 hook 會自動跑 `npx tsc --noEmit`）。
 
-## Architecture
+## 規則優先序
 
-This is an **Electron + React** desktop app built with Vite. The two distinct runtime contexts are:
+使用者當下指示 > 本檔與 `docs/ops/` 制度檔 > skills（superpowers 等）> 預設行為。
+skills 只在不與制度檔衝突時使用；多個 skill 都像時，查 `docs/ops/03-judgment.md` 的裁決表。
 
-### Electron Main Process (`electron/main/`)
-- **`index.ts`** — thin BrowserWindow setup + IPC handlers: `batch-translate`, `get-analysis`, `get-translated-content`, `get-subtitle-preview`, `check-analysis-cache`, `retry-file`; delegates the actual work to the four modules below
-- **`utils/translate.ts`** — AI calls only: Vercel AI SDK (`@ai-sdk/openai-compatible`) chunk/single-line translation, tool-calling with `generateObject` JSON schema fallback
-- **`utils/subtitle.ts`** — subtitle parsing/serialization: `parseSubtitle` (SRT/VTT/ASS/SSA), `saveTranslated` (atomic `.tmp` rename writes), `normalizeCues`, `splitIntoChunk`
-- **`utils/analysis.ts`** — context analysis orchestration and caching: `getOrCreateAnalysis`, `hashContent`, `analysisCachePath`, `formatAnalysisContext`
-- **`utils/pipeline.ts`** — translation flow orchestration: `translateFile` (parse → analyze → chunk → parallel translate with sliding context window → line-level fallback → save), `retryTranslate` (exponential backoff), `isLocalModel`
-- **`electron/shared/subtitleKey.ts`** — `makeKey` helper for identifying cues by timestamp, shared between main-process modules and the renderer (TranslatorPanel imports it directly)
+## 任務路由（任務類型 → 先讀哪個檔 / 先用什麼）
 
-### Renderer Process (`src/`)
-- React 18 + React Router (hash-based, three routes: `/`, `/settings`, `/about`)
-- Redux Toolkit store (`src/store/`) manages only the file list in memory (not persisted)
-- All other state (API keys, model, prompt, language, temperature, etc.) is persisted via `localStorage` using `usehooks-ts`'s `useLocalStorage`
-- `src/hooks/useOpenAI.ts` — localStorage-backed settings hooks (API keys, host, provider, temperature)
+| 任務類型 | 先讀 / 先用 |
+|---|---|
+| 了解架構、pipeline、IPC、localStorage keys、劇集模式 | `docs/ops/10-architecture.md`（行為以程式碼為準） |
+| 查符號定義、誰呼叫誰、改動影響範圍 | codegraph MCP（`codegraph_context`），不要 grep + 整檔讀 |
+| 搜尋、掃 repo、大量讀檔、研究 | 派 subagent：`docs/ops/02-delegation.md`；模板 `/ops-search`、`/ops-research` |
+| 實作、重構、審查 | 模板 `/ops-implement`、`/ops-refactor`、`/ops-review` |
+| 判斷猶豫：該升級模型？算完成嗎？該問使用者嗎？ | `docs/ops/03-judgment.md` |
+| 修改 `docs/ops/` 制度檔、踩坑後寫教訓 | `docs/ops/04-maintenance.md` |
+| 環境有哪些 agents / skills / MCP / hooks | `docs/ops/00-inventory.md` |
+| 發布前檢查 | `/release-check` |
+| i18n key 缺漏 | `/i18n-sync` |
 
-### IPC Communication Pattern
-Renderer invokes translation via `ipcRenderer.invoke("batch-translate", { files, params })`. Main process does the actual file I/O and AI calls, then pushes progress updates back via `ipcRenderer.send("batch-progress", data)`. The renderer listens with `ipcRenderer.on("batch-progress", handler)`.
+## 硬規則（違反會直接出錯）
 
-**Note:** `nodeIntegration: true` and `contextIsolation: false` are set on the BrowserWindow — the renderer can import `electron` directly (e.g., `import { ipcRenderer } from "electron"`).
-
-### Translation Pipeline (Main Process)
-1. Parse subtitle file (`parseSubtitle`) → filter cues
-2. Analyze all text for plot summary + glossary (`analyzeSubtitlesForContext`) — result prepended to every translation request as `[Context]`; the plot summary goes in full, but the glossary is filtered per request to the terms appearing in that request's text (`filterGlossaryForText`)
-3. Split into chunks of 20 (`splitIntoChunk`)
-4. Parallel chunk processing (concurrency 10 via `tiny-async-pool`) with sliding context window (±5 cues around each chunk)
-5. Each chunk: try tool-calling first, fall back to `generateObject` (JSON schema)
-6. Retry with exponential backoff (`retryTranslate`) up to 5 attempts for network/rate-limit/schema errors
-7. Line-by-line fallback (`translateSubtitleSingle`) for misaligned chunks
-8. Atomic file writes after each chunk update (`.tmp` rename pattern) for live preview
-9. Output saved as `<original-name>.translated.<ext>` in same directory
-
-Series mode: subtitle files in the same folder share an accumulated glossary
-(`.series-glossary.json`, first-wins, capped at 100 entries by category priority
-person > organization > place > term). Files in the same folder are processed
-sequentially (natural filename order); different folders run in parallel.
-To reset the series glossary, delete `.series-glossary.json` AND re-analyze the episodes (the reanalyze dialog, or delete the per-file `.analysis.json` caches) — otherwise cached per-episode analyses will repopulate the old terms on the next run.
-
-### Settings Persistence
-All user settings use `localStorage` keys:
-- `api_keys` — array of API key strings
-- `api_host` — base URL (default: `https://api.openai.com/v1`)
-- `api_provider` — enum: `openrouter | openai | vercel-gateway | openai-compatible`
-- `model` — model ID (default: `gpt-4-turbo`)
-- `translate_lang` — target language
-- `translate_additional` — additional instructions appended to prompt
-- `ai_temperature` — sampling temperature (default: 1)
-- `multi_language_save` — `none | translate+original | original+translate`
-
-### Supported Subtitle Formats
-`.srt`, `.vtt` — parsed via `subtitle` npm package  
-`.ass`, `.ssa` — parsed via `ass-parser` / `ass-stringify`
-
-### Build Output
-- `dist/` — Vite renderer bundle
-- `dist-electron/` — compiled Electron main + preload
-- `release/` — packaged distributables (dmg/nsis/AppImage)
+- `dist/`、`dist-electron/`、`release/` 是建置產物，禁止編輯（PreToolUse hook 會擋）。
+- 執行期需要的套件放 `dependencies`，不放 `devDependencies`（pnpm 11 + electron-builder 打包教訓）。
+- renderer 是 `nodeIntegration: true`、`contextIsolation: false`，可直接 `import { ipcRenderer } from "electron"`。
+- 字幕輸出檔名固定 `<原檔名>.translated.<副檔名>`；支援 `.srt/.vtt/.ass/.ssa`。
+- 制度檔（`docs/ops/`）的 commit 一律用 `ops:` 前綴。
 
 ## Agent skills
 
-### Issue tracker
-
-Issues live in GitHub Issues (`onepage1230/subtitle-translator-electron`). See `docs/agents/issue-tracker.md`.
-
-### Triage labels
-
-Uses default five-role label vocabulary. See `docs/agents/triage-labels.md`.
-
-### Domain docs
-
-Single-context repo: one `CONTEXT.md` + `docs/adr/` at repo root. See `docs/agents/domain.md`.
+- Issue tracker：GitHub Issues（`onepage1230/subtitle-translator-electron`），見 `docs/agents/issue-tracker.md`
+- Triage labels：預設五角色標籤，見 `docs/agents/triage-labels.md`
+- Domain docs：單一 `CONTEXT.md` + `docs/adr/`，見 `docs/agents/domain.md`
