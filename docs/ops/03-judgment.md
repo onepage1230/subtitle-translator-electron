@@ -77,12 +77,12 @@
 
 | 情境 | 用哪個 | 不用哪個 |
 |---|---|---|
-| 修 bug、有錯誤訊息 | `superpowers:systematic-debugging`（或 `/diagnose`，二選一，先到先得，不要兩個都走） | `tdd`（那是「開發新功能」的流程） |
+| 修 bug、有錯誤訊息 | `superpowers:systematic-debugging`（或 mattpocock 的 `diagnosing-bugs`，二選一，先到先得，不要兩個都走） | `tdd`（那是「開發新功能」的流程） |
 | 走 `/ops-*` 派工模板中 | 模板本身（模板已內含流程裁決） | 其他 process skills 一律不再觸發 |
 | 小於 10 行的顯而易見修改 | 直接改 + §5 底線驗證 | `brainstorming`（殺雞牛刀） |
 | 新功能、需求模糊 | `superpowers:brainstorming` 先釐清 | 直接動手 |
 | 要 commit / 宣稱完成前 | `superpowers:verification-before-completion` 與本檔 §2 並用（不衝突） | — |
-| 制度檔修改 | `04-maintenance.md`（本制度） | `write-a-skill` 等通用 skill |
+| 制度檔修改 | `04-maintenance.md`（本制度） | `writing-great-skills` 等通用 skill |
 
 ## 7. 這套 rubric 的極限（誠實條款）
 

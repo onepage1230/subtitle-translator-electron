@@ -28,26 +28,14 @@
 
 ## 4. Skills
 
-### 專案 `.claude/skills/`（17 個；15 個為 symlink 至 `.agents/skills/`，i18n-sync 與 release-check 為實體目錄）
+### 專案 `.claude/skills/`（2 個實體目錄；2026-07-15 更新）
 
 | name | 觸發描述（截錄） |
 |---|---|
-| caveman | 極簡溝通模式，省 ~75% token |
-| diagnose | 難 bug 的紀律化診斷循環：reproduce → minimise → hypothesise → instrument → fix |
-| grill-me | 對計畫/設計連環拷問直到達成共識 |
-| grill-with-docs | 拷問 + 對照 CONTEXT.md/ADR，邊決策邊更新文件 |
-| handoff | 把當前對話壓縮成交接文件 |
 | i18n-sync | 比對 src/locales/ 三語言檔 key 缺漏 |
-| improve-codebase-architecture | 依 CONTEXT.md/ADR 找架構深化機會 |
-| prototype | 拋棄式 prototype 探索設計 |
 | release-check | build 前檢查：版本號、型別、i18n、pnpm 打包 |
-| setup-matt-pocock-skills | 建 docs/agents/ 骨架（`disable-model-invocation: true`，僅手動） |
-| tdd | red-green-refactor 循環 |
-| to-issues | 把計畫拆成 tracer-bullet issues |
-| to-prd | 對話轉 PRD 發到 issue tracker |
-| triage | issue 分流狀態機 |
-| write-a-skill | 建新 skill |
-| zoom-out | 拉高視角（`disable-model-invocation: true`，僅手動） |
+
+原本 skills.sh 複製安裝的 14 個 Matt Pocock skills（`.agents/skills/` + symlink + `skills-lock.json`）已於 2026-07-15 移除，改用 plugin `mattpocock-skills@mattpocock`（見下方 Plugin skills）。改版後部分 skill 改名：`diagnose` → `diagnosing-bugs`、`to-issues` → `to-tickets`、`to-prd` → `to-spec`、`write-a-skill` → `writing-great-skills`；`caveman`、`zoom-out` 上游已移除，不再提供。
 
 ### `~/.claude/skills/`（3 個 skill）
 
@@ -56,6 +44,8 @@ code-review、mikeon-buffett-investing（367 行，投資分析，與本專案�
 ### Plugin skills（隨 plugin 安裝，非目錄檔案）
 
 superpowers 系列（brainstorming、systematic-debugging、test-driven-development、writing-plans、executing-plans、subagent-driven-development、verification-before-completion、requesting/receiving-code-review、using-git-worktrees、dispatching-parallel-agents、finishing-a-development-branch、writing-skills、using-superpowers）、codex 系列（rescue、setup 等）、skill-creator、karpathy-guidelines、claude-automation-recommender、dataviz、artifact-design、update-config、keybindings-help、claude-api、claude-in-chrome、verify、simplify、fewer-permission-prompts、loop、schedule、run、init、review、security-review、code-review、handoff。
+
+**mattpocock-skills@mattpocock**（v1.2.0，2026-07-15 安裝，取代原 skills.sh 複製版）：ask-matt、diagnosing-bugs、grill-with-docs、triage、improve-codebase-architecture、setup-matt-pocock-skills、tdd、to-spec、to-tickets、wayfinder、implement、prototype、research、domain-modeling、codebase-design、code-review、resolving-merge-conflicts、grill-me、grilling、handoff、teach、writing-great-skills（共 22 個；查證方式：`~/.claude/plugins/cache/mattpocock/mattpocock-skills/1.2.0/.claude-plugin/plugin.json`）。
 
 ## 5. Hooks 與 settings
 
