@@ -35,6 +35,7 @@ Renderer 用 `ipcRenderer.invoke("batch-translate", { files, params })` 發起�
 5. 每 chunk 先試 tool-calling，失敗 fallback 到 `generateObject`（JSON schema）
 6. `retryTranslate` 指數退避重試，網路／限流／schema 錯誤最多 5 次
 7. 行數對不齊的 chunk 走逐行 fallback（`translateSubtitleSingle`）
+7a. 新翻的句子做品質檢查（`utils/quality.ts`：簡體字／未翻／人名詞彙表程式比對，填了 `typesafe_api_key` 再加 Jev 檢查）；有硬傷者清空後走同一個逐行 fallback 重翻一次，失敗則保留原譯文
 8. 每 chunk 完成即原子寫檔（`.tmp` rename），支援即時預覽
 9. 輸出存成 `<原檔名>.translated.<副檔名>`，與原檔同目錄
 
@@ -44,7 +45,7 @@ Renderer 用 `ipcRenderer.invoke("batch-translate", { files, params })` 發起�
 
 ## 設定持久化（localStorage keys）
 
-`api_keys`（API key 字串陣列）、`api_host`（預設 `https://api.openai.com/v1`）、`api_provider`（`openrouter | openai | vercel-gateway | openai-compatible`）、`model`（預設 `gpt-4-turbo`）、`translate_lang`、`translate_additional`、`ai_temperature`（預設 1）、`multi_language_save`（`none | translate+original | original+translate`）
+`api_keys`（API key 字串陣列）、`api_host`（預設 `https://api.openai.com/v1`）、`api_provider`（`openrouter | openai | vercel-gateway | openai-compatible`）、`model`（預設 `gpt-4-turbo`）、`translate_lang`、`translate_additional`、`ai_temperature`（預設 1）、`multi_language_save`（`none | translate+original | original+translate`）、`typesafe_api_key`（選填，TypeSafe Jev 品質檢查）
 
 ## 字幕格式與建置輸出
 
