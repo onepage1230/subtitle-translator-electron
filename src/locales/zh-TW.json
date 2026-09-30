@@ -32,6 +32,10 @@
         "description": "您可以選擇供應商（例如 OpenRouter、OpenAI 等）並於該供應商建立 API 金鑰。",
         "notify": "注意：用量由各供應商計費，請確認您的帳號狀態正常並已設定付款方式。"
       },
+      "typesafe": {
+        "name": "TypeSafe API 金鑰（選填）",
+        "description": "填入後會用 TypeSafe Jev 檢查譯文硬傷並自動重翻；留空則只做本機檢查。"
+      },
       "host": {
         "name": "API 主機",
         "description": "這通常用於繞過防火牆封鎖，若這個應用程式可以正常運作，則不需要更改此設定。"

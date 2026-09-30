@@ -129,7 +129,8 @@ describe("translateFile characterization", () => {
       events.push(e)
     );
 
-    expect(translate.translateSubtitleSingle).toHaveBeenCalledTimes(3);
+    // 3 次逐行 fallback + 3 次品質檢查重翻（mock 譯文 "T:xxx" 不含中文，被判為未翻）
+    expect(translate.translateSubtitleSingle).toHaveBeenCalledTimes(6);
     const last = events[events.length - 1];
     expect(last.status).toBe("done");
     expect(last.failedCues).toBe(0);

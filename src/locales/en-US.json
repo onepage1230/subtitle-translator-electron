@@ -32,6 +32,10 @@
         "description": "You can obtain API keys at <a href=\"https://platform.openai.com/api-keys\" target=\"_blank\">https://platform.openai.com/api-keys</a>.",
         "notify": "Note: Usage is billed by the chosen provider. Please ensure your account is active and has a valid payment method."
       },
+      "typesafe": {
+        "name": "TypeSafe API Key (optional)",
+        "description": "When filled in, TypeSafe Jev checks translations for serious flaws and automatically retranslates them. Leave empty to only run local checks."
+      },
       "host": {
         "name": "API Host",
         "description": "This is typically used to bypass firewall blocking. If this application is functioning properly, there is no need to modify this setting."

@@ -2,6 +2,7 @@ import Title from "../Title";
 import { useTranslation } from "react-i18next";
 import { useAPIHost, useAPIKeys, useAPIProvider } from "@/hooks/useOpenAI";
 import { useMemo, useState, useEffect, useRef } from "react";
+import { useLocalStorage } from "usehooks-ts";
 
 export default function API() {
   const { t } = useTranslation();
@@ -9,6 +10,7 @@ export default function API() {
   const [host, setHost] = useAPIHost();
   const noKey = useMemo(() => keys.every((k) => !k), [keys]);
   const [provider, setProvider] = useAPIProvider();
+  const [typesafeKey, setTypesafeKey] = useLocalStorage("typesafe_api_key", "");
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
@@ -173,6 +175,20 @@ export default function API() {
             className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-500 focus:border-slate-500"
           />
         )}
+
+        {/* TypeSafe (Jev) API Key — optional quality check */}
+        <div className="flex flex-col gap-1">
+          <input
+            type="password"
+            placeholder={t("api.typesafe.name")}
+            value={typesafeKey}
+            onChange={(e) => setTypesafeKey(e.target.value)}
+            className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-500 focus:border-slate-500"
+          />
+          <div className="text-xs text-slate-500">
+            {t("api.typesafe.description")}
+          </div>
+        </div>
       </div>
     </div>
   );

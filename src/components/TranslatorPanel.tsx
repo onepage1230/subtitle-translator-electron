@@ -53,6 +53,7 @@ export default function TranslatorPanel() {
   const [keys] = useAPIKeys();
   const [apiHost] = useAPIHost();
   const [temperature] = useTemperature();
+  const [typesafeApiKey] = useLocalStorage("typesafe_api_key", "");
   const [multiLangSave] = useLocalStorage("multi_language_save", "none");
   const [concurrentRequests] = useLocalStorage<number | undefined>(
     "concurrent_requests",
@@ -131,6 +132,7 @@ export default function TranslatorPanel() {
     delay: delay * 1000,
     forceReanalyze,
     concurrentRequests,
+    typesafeApiKey,
   });
 
   const executeBatchTranslation = async (forceReanalyze: boolean) => {
