@@ -106,6 +106,7 @@
       "file_removed": "档案已移除",
       "no_completed_files": "没有已完成的档案可清除",
       "cleared_files": "已清除 {{count}} 个已完成档案",
+      "analysis_failed": "全局分析失败，本次翻译未使用词汇表与剧情摘要",
       "analyzing_context": "分析上下文",
       "close": "关闭",
       "context": {

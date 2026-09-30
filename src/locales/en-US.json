@@ -106,6 +106,7 @@
       "file_removed": "File removed",
       "no_completed_files": "No completed files to clear",
       "cleared_files": "Cleared {{count}} completed file(s)",
+      "analysis_failed": "Context analysis failed; translating without glossary and plot summary",
       "analyzing_context": "Analyzing context",
       "close": "Close",
       "context": {

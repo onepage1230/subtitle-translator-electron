@@ -89,6 +89,7 @@ export interface ProgressEvent {
   error?: string;
   failedCues?: number;
   failedKeys?: string[];
+  analysisFailed?: boolean;
 }
 
 export async function translateFile(
@@ -179,6 +180,7 @@ export async function translateFile(
 
     const baseAdditional = params.additional || "";
     let analysisData: AnalysisResult | null = null;
+    let analysisFailed = false;
 
     const folder = path.dirname(file.path);
     const { terms: seriesTerms, excluded: seriesExcluded } = loadSeriesGlossary(folder);
@@ -236,8 +238,12 @@ export async function translateFile(
         );
         analysisData = { plotSummary: alignedSummary, glossary: combinedGlossary };
         onProgress({ filePath: file.path, progress: 4, status: "analyzing", totalCues, currentCue: 0, analysis: analysisData });
+      } else {
+        analysisFailed = true;
+        console.warn("Context analysis returned no result, continue without it");
       }
     } catch (analysisErr) {
+      analysisFailed = true;
       console.warn("Context analysis failed, continue without it:", analysisErr);
     }
 
@@ -258,6 +264,7 @@ export async function translateFile(
       totalCues,
       currentCue: 0,
       analysis: analysisData,
+      analysisFailed,
     });
 
     // Translate
@@ -508,6 +515,7 @@ export async function translateFile(
       analysis: analysisData,
       failedCues: failedKeys.size,
       failedKeys: Array.from(failedKeys),
+      analysisFailed,
     });
   } catch (e) {
     console.error(`Batch translation error for ${file.path}:`, e);

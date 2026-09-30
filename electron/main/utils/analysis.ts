@@ -153,7 +153,10 @@ async function getOrCreateAnalysis(opts: {
         lang: params.lang,
         temperature: 0.3,
         existingGlossary,
-      }).catch(() => null)
+      }).catch((err) => {
+        console.warn("Analysis section failed:", err);
+        return null;
+      })
     )
   );
   const validResults = sectionResults.filter((r): r is AnalysisResult => r !== null);

@@ -240,6 +240,22 @@ async function translateSubtitleSingle(
   }
 }
 
+function unwrapSingleElementArray(text: string): string | null {
+  try {
+    const parsed = JSON.parse(text);
+    if (
+      Array.isArray(parsed) &&
+      parsed.length === 1 &&
+      parsed[0] &&
+      typeof parsed[0] === "object" &&
+      !Array.isArray(parsed[0])
+    ) {
+      return JSON.stringify(parsed[0]);
+    }
+  } catch {}
+  return null;
+}
+
 async function analyzeSubtitlesForContext(
   subtitles: string[],
   {
@@ -270,19 +286,39 @@ async function analyzeSubtitlesForContext(
           .join("\n")}\nIf a new term appears to be a shorter form, alias, or romanization variant of an established term (e.g. the given name of an established full name), derive its translation from the established translation instead of creating an unrelated one.`
       : "";
 
-  const { object } = await generateObject({
-    model: ai(model),
-    temperature,
-    schema: analysisSchema,
-    system: `You are a subtitle content analyst for a translation system.
+  // 本機模型（openai-compatible 未開 structuredOutputs）不會收到 JSON schema，
+  // 只看得到 prompt；沒寫明格式時曾回傳 ["plotSummary","glossary"] 或把輸入
+  // 字幕原樣當陣列回傳。所以在 system prompt 明寫輸出形狀，格式錯時再試一次。
+  const system = `You are a subtitle content analyst for a translation system.
 Analyze the provided subtitle sample and return:
 1. plotSummary: A ${lang} narrative (5–10 sentences) describing what happens. Write naturally, not as a literal stitch of subtitles.
-2. glossary: Up to 15 entries of proper nouns ONLY — person names (category "person"), place names ("place"), organization or group names ("organization"), and titles, fictional terms or domain-specific jargon ("term"). Do NOT include common nouns, everyday vocabulary, or full sentences. For each entry provide the term as it appears, its preferred ${lang} translation or rendering (repeat the original term if no translation exists), and its category. If you recognize the work and an official or widely-used ${lang} translation of a name exists (e.g. from official subtitles or publications), prefer it over inventing a new rendering. When the same person appears under multiple forms (full name, given name only, nickname, romanization variants), create one entry per form and keep their translations mutually consistent: romanization variants of the same name must share the identical translation, and a shorter form's translation must be the corresponding part of the full name's translation — never render the same person's name two different ways.${existingSection}`,
-    prompt: `Analyze this subtitle sample:\n\n` + subtitles.join("\n"),
-    maxRetries: 2,
-  });
+2. glossary: Up to 15 entries of proper nouns ONLY — person names (category "person"), place names ("place"), organization or group names ("organization"), and titles, fictional terms or domain-specific jargon ("term"). Do NOT include common nouns, everyday vocabulary, or full sentences. For each entry provide the term as it appears, its preferred ${lang} translation or rendering (repeat the original term if no translation exists), and its category. If you recognize the work and an official or widely-used ${lang} translation of a name exists (e.g. from official subtitles or publications), prefer it over inventing a new rendering. When the same person appears under multiple forms (full name, given name only, nickname, romanization variants), create one entry per form and keep their translations mutually consistent: romanization variants of the same name must share the identical translation, and a shorter form's translation must be the corresponding part of the full name's translation — never render the same person's name two different ways.${existingSection}
 
-  return object;
+Output format: reply with ONE JSON object and nothing else, exactly this shape:
+{"plotSummary": "<${lang} summary>", "glossary": [{"term": "<as in subtitles>", "translation": "<${lang} rendering>", "category": "person" | "place" | "organization" | "term"}]}
+Do NOT return a JSON array. Do NOT echo or translate the subtitle lines.`;
+
+  let lastErr: unknown;
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    try {
+      const { object } = await generateObject({
+        model: ai(model),
+        temperature,
+        schema: analysisSchema,
+        system,
+        prompt: `Analyze this subtitle sample:\n\n` + subtitles.join("\n"),
+        maxRetries: 2,
+        // 伺服器端 JSON 模式會把物件包成單元素陣列 [{...}]，拆掉外層再驗證
+        experimental_repairText: async ({ text }) => unwrapSingleElementArray(text),
+      });
+      return object;
+    } catch (err) {
+      lastErr = err;
+      if ((err as any)?.name !== "AI_NoObjectGeneratedError") throw err;
+      console.warn(`Analysis attempt ${attempt} returned wrong shape, retrying...`);
+    }
+  }
+  throw lastErr;
 }
 
 async function synthesizePlotSummaries(
@@ -343,6 +379,20 @@ function repairReconciledGlossary(
     (parsed as Record<string, unknown>).glossary !== undefined
   ) {
     parsed = (parsed as Record<string, unknown>).glossary;
+  }
+  // 字串陣列：["Jae-Ha: 宰河 (person)", ...] → 轉成扁平 map 交給下方解析
+  if (
+    Array.isArray(parsed) &&
+    parsed.length > 0 &&
+    parsed.every((e) => typeof e === "string")
+  ) {
+    const map: Record<string, string> = {};
+    for (const line of parsed as string[]) {
+      const idx = line.indexOf(":");
+      if (idx <= 0) return null;
+      map[line.slice(0, idx).trim()] = line.slice(idx + 1).trim();
+    }
+    parsed = map;
   }
   // 裸的條目陣列（少了包裹物件）
   if (Array.isArray(parsed)) {
@@ -445,4 +495,5 @@ export {
   synthesizePlotSummaries,
   reconcileGlossary,
   parseNumberedList,
+  unwrapSingleElementArray,
 };

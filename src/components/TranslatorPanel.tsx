@@ -33,6 +33,7 @@ interface ProgressType {
   };
   failedCues?: number;
   failedKeys?: string[];
+  analysisFailed?: boolean;
 }
 
 export default function TranslatorPanel() {
@@ -494,6 +495,11 @@ export default function TranslatorPanel() {
                         />
                       </div>
                       <div className="text-xs text-slate-500">{statusText}</div>
+                      {progressData.analysisFailed && (
+                        <div className="text-xs text-amber-600">
+                          {t("translate.analysis_failed")}
+                        </div>
+                      )}
                       {progressData.error && (
                         <div className="text-xs text-red-500">
                           {progressData.error}

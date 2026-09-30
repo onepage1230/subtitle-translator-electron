@@ -117,6 +117,19 @@ describe("reconcileGlossary shape repair", () => {
     ]);
   });
 
+  it("repairs an array of 'term: translation (category)' strings", async () => {
+    generateObjectMock.mockRejectedValue(
+      schemaError(
+        JSON.stringify(["Baek Hyun-woo: 白賢祐 (person)", "J Hotel: J酒店 (place)"])
+      )
+    );
+    const result = await reconcileGlossary(NEW_ENTRIES, LOCKED, OPTS);
+    expect(result).toEqual([
+      { term: "Baek Hyun-woo", translation: "白賢祐", category: "person" },
+      { term: "J Hotel", translation: "J酒店", category: "place" },
+    ]);
+  });
+
   it("accepts a bare entry array missing the wrapper object", async () => {
     generateObjectMock.mockRejectedValue(
       schemaError(
