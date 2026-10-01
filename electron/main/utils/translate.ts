@@ -37,7 +37,7 @@ function getAi({ apiKey, apiHost }: { apiKey: string; apiHost: string }) {
     baseURL: apiHost,
     headers: {
       // OpenRouter Headers
-      "HTTP-Referer": "https://github.com/gnehs/subtitle-translator-electron",
+      "HTTP-Referer": "https://github.com/onepage1230/subtitle-translator-electron",
       "X-Title": "Subtitle Translator",
     },
   });
