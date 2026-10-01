@@ -170,7 +170,9 @@ async function getOrCreateAnalysis(opts: {
         model: params.model,
         lang: params.lang,
         temperature: 0.3,
-        existingGlossary,
+        // 只注入本段字幕實際出現的詞條：整份劇集詞彙表加上 "MUST reuse" 會讓模型把
+        // 本段沒出場的角色寫進摘要（E02 童年篇被寫成 E01 的成年人名，2026-10-01 實驗）
+        existingGlossary: existingGlossary && filterGlossaryForText(existingGlossary, section),
         disableThinking: params.disableThinking,
       }).catch((err) => {
         console.warn(`Analysis section ${i + 1}/${sections.length} failed:`, err);

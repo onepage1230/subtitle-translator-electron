@@ -195,15 +195,17 @@ describe("getOrCreateAnalysis", () => {
     expect(r!.glossary[0].category).toBe("term");
   });
 
-  it("passes existingGlossary through to every section analysis", async () => {
-    const existing = [{ term: "Neo", translation: "尼歐", category: "person" as const }];
+  it("injects only the series glossary entries that appear in each section", async () => {
+    const neo = { term: "Neo", translation: "尼歐", category: "person" as const };
+    const trinity = { term: "Trinity", translation: "崔妮蒂", category: "person" as const };
     await getOrCreateAnalysis({
-      texts: ["a", "b", "c"], cacheFile: tmpCacheFile(), contentHash: "h",
-      forceReanalyze: false, params: PARAMS, existingGlossary: existing,
+      texts: ["Neo wakes up", "Trinity calls", "nobody here"], cacheFile: tmpCacheFile(),
+      contentHash: "h", forceReanalyze: false, params: PARAMS, existingGlossary: [neo, trinity],
     });
-    for (const call of vi.mocked(translate.analyzeSubtitlesForContext).mock.calls) {
-      expect(call[1].existingGlossary).toEqual(existing);
-    }
+    const injected = vi.mocked(translate.analyzeSubtitlesForContext).mock.calls.map(
+      (call) => call[1].existingGlossary
+    );
+    expect(injected).toEqual([[neo], [trinity], []]);
   });
 
   it("reports partial section failures and logs the raw response", async () => {

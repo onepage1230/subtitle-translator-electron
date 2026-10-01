@@ -36,17 +36,18 @@ beforeEach(() => {
     .mockImplementation(async (entries: any[]) => entries);
 });
 
-it("episode 2 analysis receives episode 1 glossary; series file accumulates", async () => {
+it("episode 2 analysis receives the episode 1 terms it mentions; series file accumulates", async () => {
   const folder = fs.mkdtempSync(path.join(os.tmpdir(), "stx-series-"));
   const ep1 = path.join(folder, "EP1.srt");
   const ep2 = path.join(folder, "EP2.srt");
   fs.writeFileSync(ep1, SRT_EP("Neo appears"), "utf8");
-  fs.writeFileSync(ep2, SRT_EP("Trinity appears"), "utf8");
+  // 分析只注入本段出現過的劇集詞條，所以 EP2 要提到 Neo 才會收到
+  fs.writeFileSync(ep2, SRT_EP("Trinity meets Neo"), "utf8");
 
   vi.mocked(translate.analyzeSubtitlesForContext).mockReset()
     .mockImplementation(async (subs: string[]) => ({
       plotSummary: "p",
-      glossary: subs.join(" ").includes("Neo")
+      glossary: !subs.join(" ").includes("Trinity")
         ? [{ term: "Neo", translation: "尼歐", category: "person" as const }]
         : [{ term: "Trinity", translation: "崔妮蒂", category: "person" as const }],
     }));

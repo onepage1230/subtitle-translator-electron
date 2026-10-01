@@ -303,7 +303,7 @@ async function analyzeSubtitlesForContext(
   // 字幕原樣當陣列回傳。所以在 system prompt 明寫輸出形狀，格式錯時再試一次。
   const system = `You are a subtitle content analyst for a translation system.
 Analyze the provided subtitle sample and return:
-1. plotSummary: A ${lang} narrative (5–10 sentences) describing what happens. Write naturally, not as a literal stitch of subtitles.
+1. plotSummary: A ${lang} narrative (5–10 sentences) describing what happens. Write naturally, not as a literal stitch of subtitles. Describe only characters who actually appear in this sample, and do not guess relationships the dialogue does not support.
 2. glossary: Up to 15 entries of proper nouns ONLY — person names (category "person"), place names ("place"), organization or group names ("organization"), and titles, fictional terms or domain-specific jargon ("term"). Do NOT include common nouns, everyday vocabulary, or full sentences. For each entry provide the term as it appears, its preferred ${lang} translation or rendering (repeat the original term if no translation exists), and its category. If you recognize the work and an official or widely-used ${lang} translation of a name exists (e.g. from official subtitles or publications), prefer it over inventing a new rendering. When the same person appears under multiple forms (full name, given name only, nickname, romanization variants), create one entry per form and keep their translations mutually consistent: romanization variants of the same name must share the identical translation, and a shorter form's translation must be the corresponding part of the full name's translation — never render the same person's name two different ways.${existingSection}
 
 Output format: reply with ONE JSON object and nothing else, exactly this shape:
