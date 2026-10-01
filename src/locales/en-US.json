@@ -93,7 +93,7 @@
       "target": "Target language",
       "target_description": "English, 繁體中文, 日本語, etc.",
       "additional": "Additional notes",
-      "additional_description": "e.g. This is a Star Wars movie.",
+      "additional_description": "e.g. This is a Star Wars movie. Also used for plot analysis, so you can note character relationships (e.g. the narrator 'I' in the opening is Su-ho). Force reanalysis after changing notes.",
       "file": "File",
       "file_description": "Drag and drop the subtitle file or click here to choose a file.",
       "subtitleFilter": {

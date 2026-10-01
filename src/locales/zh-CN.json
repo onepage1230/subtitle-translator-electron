@@ -93,7 +93,7 @@
       "target": "目标语言",
       "target_description": "英文，繁体中文，日本语，等等。",
       "additional": "附加注记",
-      "additional_description": "例如：这是一部星际大战电影。",
+      "additional_description": "例如：这是一部星际大战电影。也会用于剧情分析，可注明人物关系，例如「开场旁白的『我』是秀浩」。改了备注请强制重新分析。",
       "file": "档案",
       "file_description": "拖入字幕档案，或点击此处选择档案。",
       "subtitleFilter": {
