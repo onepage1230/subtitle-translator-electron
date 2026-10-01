@@ -4,11 +4,16 @@ import useModel from "../../hooks/useModel";
 import { useEffect, useMemo, useState, useRef } from "react";
 import { useAPIHost, useAPIKeys } from "@/hooks/useOpenAI";
 import { useTemperature } from "../../hooks/useOpenAI";
+import { useLocalStorage } from "usehooks-ts";
 
 export default function Model() {
   const { t } = useTranslation();
   const [model, setModel] = useModel();
   const [temperature, setTemperature] = useTemperature();
+  const [disableAnalysisThinking, setDisableAnalysisThinking] = useLocalStorage(
+    "disable_analysis_thinking",
+    true
+  );
   const [host] = useAPIHost();
   const [keys] = useAPIKeys();
   const [remoteModels, setRemoteModels] = useState<string[]>([]);
@@ -272,6 +277,22 @@ export default function Model() {
             step="0.01"
           />
         </div>
+      </div>
+
+      {/* Disable thinking during analysis */}
+      <div className="bg-white rounded flex justify-between items-center border border-slate-200 p-4 gap-8">
+        <div className="flex flex-col">
+          <Title>{t("disableAnalysisThinking.title")}</Title>
+          <div className="text-sm text-slate-600">
+            {t("disableAnalysisThinking.description")}
+          </div>
+        </div>
+        <input
+          type="checkbox"
+          checked={disableAnalysisThinking}
+          onChange={(e) => setDisableAnalysisThinking(e.target.checked)}
+          className="w-5 h-5 shrink-0 accent-slate-500"
+        />
       </div>
     </div>
   );

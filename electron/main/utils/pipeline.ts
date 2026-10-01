@@ -5,7 +5,7 @@ import { makeKey } from "../../shared/subtitleKey";
 import type { AnalysisResult } from "./translate";
 import { translateSubtitleChunk, translateSubtitleSingle, reconcileGlossary } from "./translate";
 import { splitIntoChunk, parseSubtitle, saveTranslated, normalizeCues } from "./subtitle";
-import { hashContent, analysisCachePath, getOrCreateAnalysis, formatAnalysisContext, alignPlotSummaryWithGlossary, filterGlossaryForText } from "./analysis";
+import { hashContent, analysisCachePath, appendAnalysisFailureLog, getOrCreateAnalysis, formatAnalysisContext, alignPlotSummaryWithGlossary, filterGlossaryForText } from "./analysis";
 import { detectCodeIssues, isTraditionalChineseTarget, isChineseTarget, checkWithJev } from "./quality";
 import {
   loadSeriesGlossary,
@@ -79,6 +79,8 @@ export interface TranslateParams {
   concurrentRequests?: number;
   forceReanalyze?: boolean;
   typesafeApiKey?: string;
+  // 分析步驟（段落分析、摘要合成、詞彙表調和）關閉推理模型的 thinking
+  disableAnalysisThinking?: boolean;
 }
 
 export interface ProgressEvent {
@@ -93,6 +95,8 @@ export interface ProgressEvent {
   failedKeys?: string[];
   qualityFlagged?: number;
   analysisFailed?: boolean;
+  // 部分段落分析失敗（仍有結果）；全部失敗時只設 analysisFailed
+  analysisPartial?: { failed: number; total: number };
 }
 
 export async function translateFile(
@@ -184,6 +188,7 @@ export async function translateFile(
     const baseAdditional = params.additional || "";
     let analysisData: AnalysisResult | null = null;
     let analysisFailed = false;
+    let analysisPartial: { failed: number; total: number } | undefined;
 
     const folder = path.dirname(file.path);
     const { terms: seriesTerms, excluded: seriesExcluded } = loadSeriesGlossary(folder);
@@ -199,8 +204,12 @@ export async function translateFile(
           apiHost: params.apiHost || "https://api.openai.com/v1",
           model: params.model || "",
           lang: params.lang || "",
+          disableThinking: params.disableAnalysisThinking,
         },
         existingGlossary: seriesTerms,
+        onSectionFailures: (failed, total) => {
+          if (failed < total) analysisPartial = { failed, total };
+        },
       });
       if (analysisData) {
         // 詞彙表調和：讓模型認出同一人物的變體（羅馬拼音差異、全名/簡稱），
@@ -220,6 +229,7 @@ export async function translateFile(
               model: params.model || "",
               lang: params.lang || "",
               temperature: 0.3,
+              disableThinking: params.disableAnalysisThinking,
             });
             episodeGlossary = enforceReconciliation(
               reconciled,
@@ -228,6 +238,7 @@ export async function translateFile(
             );
           } catch (reconcileErr) {
             console.warn("Glossary reconciliation failed, using raw glossary:", reconcileErr);
+            appendAnalysisFailureLog(cacheFile, "glossary reconciliation", reconcileErr);
           }
         }
         const combinedGlossary = mergeIntoSeriesGlossary(seriesTerms, episodeGlossary, seriesExcluded);
@@ -268,6 +279,7 @@ export async function translateFile(
       currentCue: 0,
       analysis: analysisData,
       analysisFailed,
+      analysisPartial,
     });
 
     // Translate
@@ -590,6 +602,7 @@ export async function translateFile(
       failedKeys: Array.from(failedKeys),
       qualityFlagged: originalTranslations.size,
       analysisFailed,
+      analysisPartial,
     });
   } catch (e) {
     console.error(`Batch translation error for ${file.path}:`, e);

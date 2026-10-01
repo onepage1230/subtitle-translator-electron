@@ -205,6 +205,35 @@ describe("getOrCreateAnalysis", () => {
       expect(call[1].existingGlossary).toEqual(existing);
     }
   });
+
+  it("reports partial section failures and logs the raw response", async () => {
+    const cacheFile = tmpCacheFile();
+    vi.mocked(translate.analyzeSubtitlesForContext)
+      .mockResolvedValueOnce({ plotSummary: "p1", glossary: [] })
+      .mockRejectedValueOnce(
+        Object.assign(new Error("No JSON value found"), { text: "[1.0]" })
+      )
+      .mockResolvedValueOnce({ plotSummary: "p3", glossary: [] });
+    const onSectionFailures = vi.fn();
+    const r = await getOrCreateAnalysis({
+      texts: ["a", "b", "c"], cacheFile, contentHash: "h",
+      forceReanalyze: true, params: PARAMS, onSectionFailures,
+    });
+    expect(r).not.toBeNull();
+    expect(onSectionFailures).toHaveBeenCalledWith(1, 3);
+    const log = fs.readFileSync(cacheFile.replace(".analysis.json", ".analysis-failures.log"), "utf8");
+    expect(log).toContain("analysis section 2/3");
+    expect(log).toContain("[1.0]");
+  });
+
+  it("does not report failures when every section succeeds", async () => {
+    const onSectionFailures = vi.fn();
+    await getOrCreateAnalysis({
+      texts: ["a", "b", "c"], cacheFile: tmpCacheFile(), contentHash: "h",
+      forceReanalyze: true, params: PARAMS, onSectionFailures,
+    });
+    expect(onSectionFailures).not.toHaveBeenCalled();
+  });
 });
 
 describe("filterGlossaryForText", () => {

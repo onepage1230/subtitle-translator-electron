@@ -34,6 +34,7 @@ interface ProgressType {
   failedCues?: number;
   failedKeys?: string[];
   analysisFailed?: boolean;
+  analysisPartial?: { failed: number; total: number };
 }
 
 export default function TranslatorPanel() {
@@ -54,6 +55,7 @@ export default function TranslatorPanel() {
   const [apiHost] = useAPIHost();
   const [temperature] = useTemperature();
   const [typesafeApiKey] = useLocalStorage("typesafe_api_key", "");
+  const [disableAnalysisThinking] = useLocalStorage("disable_analysis_thinking", true);
   const [multiLangSave] = useLocalStorage("multi_language_save", "none");
   const [concurrentRequests] = useLocalStorage<number | undefined>(
     "concurrent_requests",
@@ -133,6 +135,7 @@ export default function TranslatorPanel() {
     forceReanalyze,
     concurrentRequests,
     typesafeApiKey,
+    disableAnalysisThinking,
   });
 
   const executeBatchTranslation = async (forceReanalyze: boolean) => {
@@ -500,6 +503,14 @@ export default function TranslatorPanel() {
                       {progressData.analysisFailed && (
                         <div className="text-xs text-amber-600">
                           {t("translate.analysis_failed")}
+                        </div>
+                      )}
+                      {progressData.analysisPartial && (
+                        <div className="text-xs text-amber-600">
+                          {t("translate.analysis_partial", {
+                            ok: progressData.analysisPartial.total - progressData.analysisPartial.failed,
+                            total: progressData.analysisPartial.total,
+                          })}
                         </div>
                       )}
                       {progressData.error && (
