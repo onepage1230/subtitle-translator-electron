@@ -210,6 +210,7 @@ export async function translateFile(
           lang: params.lang || "",
           disableThinking: params.analysisThinkingMode === "off",
           disableAuxThinking: (params.analysisThinkingMode ?? "light") !== "keep",
+          userNotes: params.additional || "",
         },
         existingGlossary: seriesTerms,
         onSectionFailures: (failed, total) => {

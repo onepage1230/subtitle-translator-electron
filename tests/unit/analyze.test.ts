@@ -9,7 +9,7 @@ vi.mock("ai", async (importOriginal) => {
   };
 });
 
-import { analyzeSubtitlesForContext } from "../../electron/main/utils/translate";
+import { analyzeSubtitlesForContext, synthesizePlotSummaries } from "../../electron/main/utils/translate";
 
 const OPTS = { apiKeys: ["k"], apiHost: "https://h/v1", model: "m", lang: "zh-TW" };
 
@@ -73,6 +73,27 @@ describe("analyzeSubtitlesForContext", () => {
     generateTextMock.mockClear();
     await analyzeSubtitlesForContext(["line"], OPTS);
     expect(generateTextMock.mock.calls[0][0].providerOptions).toBeUndefined();
+  });
+
+  it("tells the model to say 'the narrator' for unattributable first-person narration", async () => {
+    await analyzeSubtitlesForContext(["line"], OPTS);
+    expect(generateTextMock.mock.calls[0][0].system).toMatch(/the narrator/);
+  });
+
+  it("appends user notes as reliable facts, only when provided", async () => {
+    await analyzeSubtitlesForContext(["line"], { ...OPTS, userNotes: "開場旁白的「我」是秀浩" });
+    expect(generateTextMock.mock.calls[0][0].system).toMatch(/Notes from the user[\s\S]*開場旁白的「我」是秀浩/);
+    generateTextMock.mockClear();
+    await analyzeSubtitlesForContext(["line"], { ...OPTS, userNotes: "  " });
+    expect(generateTextMock.mock.calls[0][0].system).not.toMatch(/Notes from the user/);
+  });
+
+  it("synthesis keeps attribution and receives user notes", async () => {
+    generateTextMock.mockResolvedValue({ text: "s" });
+    await synthesizePlotSummaries(["a", "b"], { ...OPTS, userNotes: "旁白是秀浩" });
+    const { system } = generateTextMock.mock.calls[0][0];
+    expect(system).toMatch(/same character/);
+    expect(system).toContain("旁白是秀浩");
   });
 
   it("does not retry network errors", async () => {

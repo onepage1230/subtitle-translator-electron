@@ -266,6 +266,13 @@ function unwrapSingleElementArray(value: unknown): unknown {
   return value;
 }
 
+// 使用者備註寫在格式說明之後，避免模型把它當成要摘要的內容
+function notesSection(userNotes?: string): string {
+  return userNotes && userNotes.trim()
+    ? `\n\nNotes from the user about this work (treat as reliable facts when identifying characters):\n${userNotes.trim()}`
+    : "";
+}
+
 async function analyzeSubtitlesForContext(
   subtitles: string[],
   {
@@ -276,6 +283,7 @@ async function analyzeSubtitlesForContext(
     temperature = 0.3,
     existingGlossary,
     disableThinking,
+    userNotes,
   }: {
     apiKeys: string[];
     apiHost: string;
@@ -284,6 +292,8 @@ async function analyzeSubtitlesForContext(
     temperature?: number;
     existingGlossary?: GlossaryEntry[];
     disableThinking?: boolean;
+    // 使用者在設定填的附加備註（例如「開場旁白的『我』是秀浩」），當作可靠事實
+    userNotes?: string;
   }
 ): Promise<AnalysisResult> {
   if (apiKeys.length === 0) {
@@ -303,12 +313,12 @@ async function analyzeSubtitlesForContext(
   // 字幕原樣當陣列回傳。所以在 system prompt 明寫輸出形狀，格式錯時再試一次。
   const system = `You are a subtitle content analyst for a translation system.
 Analyze the provided subtitle sample and return:
-1. plotSummary: A ${lang} narrative (5–10 sentences) describing what happens. Write naturally, not as a literal stitch of subtitles. Describe only characters who actually appear in this sample, and do not guess relationships the dialogue does not support.
+1. plotSummary: A ${lang} narrative (5–10 sentences) describing what happens. Write naturally, not as a literal stitch of subtitles. Describe only characters who actually appear in this sample, and do not guess relationships the dialogue does not support. Subtitles have no speaker labels: when first-person narration ("I", "my father") cannot be attributed with confidence, refer to "the narrator" instead of naming a character.
 2. glossary: Up to 15 entries of proper nouns ONLY — person names (category "person"), place names ("place"), organization or group names ("organization"), and titles, fictional terms or domain-specific jargon ("term"). Do NOT include common nouns, everyday vocabulary, or full sentences. For each entry provide the term as it appears, its preferred ${lang} translation or rendering (repeat the original term if no translation exists), and its category. If you recognize the work and an official or widely-used ${lang} translation of a name exists (e.g. from official subtitles or publications), prefer it over inventing a new rendering. When the same person appears under multiple forms (full name, given name only, nickname, romanization variants), create one entry per form and keep their translations mutually consistent: romanization variants of the same name must share the identical translation, and a shorter form's translation must be the corresponding part of the full name's translation — never render the same person's name two different ways.${existingSection}
 
 Output format: reply with ONE JSON object and nothing else, exactly this shape:
 {"plotSummary": "<${lang} summary>", "glossary": [{"term": "<as in subtitles>", "translation": "<${lang} rendering>", "category": "person" | "place" | "organization" | "term"}]}
-Do NOT return a JSON array. Do NOT echo or translate the subtitle lines.`;
+Do NOT return a JSON array. Do NOT echo or translate the subtitle lines.${notesSection(userNotes)}`;
 
   return generateJson({
     model: ai(model),
@@ -332,6 +342,7 @@ async function synthesizePlotSummaries(
     lang,
     temperature = 0.3,
     disableThinking,
+    userNotes,
   }: {
     apiKeys: string[];
     apiHost: string;
@@ -339,6 +350,7 @@ async function synthesizePlotSummaries(
     lang: string;
     temperature?: number;
     disableThinking?: boolean;
+    userNotes?: string;
   }
 ): Promise<string> {
   if (apiKeys.length === 0 || summaries.length === 0) {
@@ -353,7 +365,7 @@ async function synthesizePlotSummaries(
   const result = await generateText({
     model: ai(model),
     temperature,
-    system: `You are a plot summarizer. Combine the provided partial summaries into one coherent ${lang} narrative. Preserve chronological order. Do not introduce information not present in the parts.`,
+    system: `You are a plot summarizer. Combine the provided partial summaries into one coherent ${lang} narrative. Preserve chronological order. Do not introduce information not present in the parts, and keep each action attributed to the same character as in its part.${notesSection(userNotes)}`,
     prompt: `Synthesize these partial summaries into one coherent summary:\n\n${numbered}`,
     providerOptions: noThinkingOptions(disableThinking),
     maxRetries: 2,

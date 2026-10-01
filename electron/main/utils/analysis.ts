@@ -145,7 +145,7 @@ async function getOrCreateAnalysis(opts: {
   cacheFile: string;
   contentHash: string;
   forceReanalyze: boolean;
-  params: { apiKeys: string[]; apiHost: string; model: string; lang: string; disableThinking?: boolean; disableAuxThinking?: boolean };
+  params: { apiKeys: string[]; apiHost: string; model: string; lang: string; disableThinking?: boolean; disableAuxThinking?: boolean; userNotes?: string };
   existingGlossary?: GlossaryEntry[];
   // 有段落失敗時回報（含全部失敗）；讀快取時不呼叫
   onSectionFailures?: (failed: number, total: number) => void;
@@ -174,6 +174,7 @@ async function getOrCreateAnalysis(opts: {
         // 本段沒出場的角色寫進摘要（E02 童年篇被寫成 E01 的成年人名，2026-10-01 實驗）
         existingGlossary: existingGlossary && filterGlossaryForText(existingGlossary, section),
         disableThinking: params.disableThinking,
+        userNotes: params.userNotes,
       }).catch((err) => {
         console.warn(`Analysis section ${i + 1}/${sections.length} failed:`, err);
         appendAnalysisFailureLog(cacheFile, `analysis section ${i + 1}/${sections.length}`, err);
@@ -202,6 +203,7 @@ async function getOrCreateAnalysis(opts: {
         lang: params.lang,
         temperature: 0.3,
         disableThinking: params.disableAuxThinking,
+        userNotes: params.userNotes,
       });
     } catch {
       plotSummary = summaries.map((s, i) => `[Act ${i + 1}]\n${s}`).join("\n\n");
@@ -210,7 +212,12 @@ async function getOrCreateAnalysis(opts: {
 
   const analysis: AnalysisResult = { plotSummary, glossary: mergedGlossary };
   try {
-    fs.writeFileSync(cacheFile, JSON.stringify({ contentHash, analysis }), "utf8");
+    // sectionSummaries 只供除錯：比對合成前後，判斷錯誤出在段落分析還是摘要合成
+    fs.writeFileSync(
+      cacheFile,
+      JSON.stringify({ contentHash, analysis, debug: { sectionSummaries: summaries } }),
+      "utf8"
+    );
   } catch {}
   return analysis;
 }
