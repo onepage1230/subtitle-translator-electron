@@ -34,7 +34,7 @@ function CheckUpdate() {
   const [newVersion, setNewVersion] = useState<string | null>(null);
   useEffect(() => {
     fetch(
-      "https://api.github.com/repos/gnehs/subtitle-translator-electron/releases/latest"
+      "https://api.github.com/repos/onepage1230/subtitle-translator-electron/releases/latest"
     )
       .then((res) => res.json())
       .then((res) => {
@@ -46,7 +46,7 @@ function CheckUpdate() {
       toast.info(`New version (${newVersion})`, {
         onClick: () => {
           shell.openExternal(
-            "https://github.com/gnehs/subtitle-translator-electron/releases/latest"
+            "https://github.com/onepage1230/subtitle-translator-electron/releases/latest"
           );
         },
         position: "bottom-center",
@@ -59,7 +59,7 @@ function CheckUpdate() {
   if (version && newVersion && isNewerVersion(newVersion, version)) {
     return (
       <a
-        href="https://github.com/gnehs/subtitle-translator-electron/releases/latest"
+        href="https://github.com/onepage1230/subtitle-translator-electron/releases/latest"
         target="_blank"
         className={`flex items-center justify-center text-[24px] text-white group p-2 rounded-lg bg-gradient-to-b from-slate-700 to-slate-500 hover:from-slate-900 hover:to-slate-700`}
       >

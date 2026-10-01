@@ -18,14 +18,14 @@ export default function About() {
             <h1 className="text-xl">{version}</h1>
             <div className="flex gap-2 items-center justify-start mt-4">
               <Button
-                href="https://github.com/gnehs/subtitle-translator-electron"
+                href="https://github.com/onepage1230/subtitle-translator-electron"
                 target="_blank"
                 icon="bxl-github"
               >
                 GitHub
               </Button>
               <Button
-                href="https://github.com/gnehs/subtitle-translator-electron/issues"
+                href="https://github.com/onepage1230/subtitle-translator-electron/issues"
                 target="_blank"
                 icon="bx-bug"
               >
