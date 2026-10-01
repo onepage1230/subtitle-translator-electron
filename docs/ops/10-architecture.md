@@ -13,7 +13,7 @@ Electron + React 桌面應用（Vite 建置），兩個執行環境：
 | `utils/jsonOutput.ts` | 結構化輸出一律 `generateJson`（`generateText` + 寬鬆 parser + zod），**不用 `generateObject`**：本機模型不支援 structuredOutputs，SDK 會改送 `response_format: json_object`，oMLX 在某些輸入上穩定回 `[1.0]` |
 | `utils/subtitle.ts` | 字幕解析／序列化：`parseSubtitle`（SRT/VTT/ASS/SSA）、`saveTranslated`（`.tmp` rename 原子寫入）、`normalizeCues`、`splitIntoChunk` |
 | `utils/nameMatch.ts` | 詞彙表調和前的人名配對篩選：候選配對（字詞子集／拼法相近／譯名共用字）→ 過濾譯名已一致者 → Jev 判斷同一人（門檻 0.5）；只有同一人且譯名不一致、或台詞 <2 句時才呼叫 LLM 調和。無 Jev key 或失敗時沿用「≥2 新人名就調和」 |
-| `utils/analysis.ts` | 前置分析與快取：`getOrCreateAnalysis`（3 段平行分析，每段只注入本段出現的劇集詞條；格式錯誤的原始回應寫 `<檔名>.analysis-failures.log`）、`hashContent`、`analysisCachePath`、`formatAnalysisContext` |
+| `utils/analysis.ts` | 前置分析與快取：`getOrCreateAnalysis`（3 段平行分析，每段只注入本段出現的劇集詞條，附加註記 `translate_additional` 也送進分析與合成當人物事實；格式錯誤的原始回應寫 `<檔名>.analysis-failures.log`；快取 `debug.sectionSummaries` 存合成前段落摘要，摘要出錯時先比對它判斷錯在分析或合成）、`hashContent`、`analysisCachePath`、`formatAnalysisContext` |
 | `utils/pipeline.ts` | 翻譯流程編排：`translateFile`（parse → analyze → chunk → 平行翻譯 + 滑動 context window → 行級 fallback → save）、`retryTranslate`（指數退避）、`isLocalModel` |
 | `electron/shared/subtitleKey.ts` | `makeKey`：以時間戳識別 cue，主程序與 renderer 共用 |
 
