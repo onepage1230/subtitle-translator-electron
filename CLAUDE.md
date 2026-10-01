@@ -6,7 +6,7 @@
 
 ```bash
 npm run dev                    # 開發（Vite + Electron 同啟）
-npm run build                  # 打包（writeVersion.js → tsc → vite build → electron-builder）
+npm run build                  # 打包（tsc → vite build → electron-builder）
 npm test                       # 單元測試（Vitest，tests/unit/）
 npm run pree2e && npm run e2e  # E2E（Playwright，先建測試版）
 ```
