@@ -61,7 +61,7 @@ export function detectCodeIssues(
   return issues;
 }
 
-const JEV_URL = "https://api.typesafe.ai/v1/systemone";
+export const JEV_URL = "https://api.typesafe.ai/v1/systemone";
 const CHUNK = 20;
 
 function buildQuestions(n: number) {
@@ -128,4 +128,79 @@ export async function checkWithJev(
     })
   );
   return result;
+}
+
+export type RetranslationChoice = "original" | "retranslation" | "same";
+
+// 重翻後由 Jev 在原譯與新譯間選較忠實者；請求失敗的組回 null（由呼叫端採預設）
+export async function chooseWithJev(
+  items: { source: string; original: string; retranslation: string }[],
+  apiKey: string,
+  opts: { fetchImpl?: typeof fetch } = {}
+): Promise<(RetranslationChoice | null)[]> {
+  const doFetch = opts.fetchImpl ?? fetch;
+  const result: (RetranslationChoice | null)[] = new Array(items.length).fill(null);
+  const groups: number[][] = [];
+  for (let i = 0; i < items.length; i += CHUNK) {
+    groups.push(Array.from({ length: Math.min(CHUNK, items.length - i) }, (_, k) => i + k));
+  }
+
+  await Promise.all(
+    groups.map(async (idxs) => {
+      try {
+        const questions: Record<string, unknown> = {};
+        idxs.forEach((_, k) => {
+          questions[`c${k}`] = {
+            type: "choice",
+            instructions: `Which translation of \`pairs[${k}].source\` is more faithful: \`pairs[${k}].original\` or \`pairs[${k}].retranslation\`? Subtitles may be condensed or rephrased naturally.`,
+            criteria: {
+              original: "`original` conveys the source meaning clearly better than `retranslation`.",
+              retranslation: "`retranslation` conveys the source meaning clearly better than `original`.",
+              same: "Both are about equally faithful (both fine, or both flawed to a similar degree).",
+            },
+          };
+        });
+        const res = await doFetch(JEV_URL, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${apiKey}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            model: "jev-latest",
+            state: { pairs: idxs.map((i) => items[i]) },
+            questions,
+          }),
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const json: any = await res.json();
+        idxs.forEach((orig, k) => {
+          const c = json?.answers?.[`c${k}`]?.choice;
+          if (c === "original" || c === "retranslation" || c === "same") result[orig] = c;
+        });
+      } catch (err) {
+        console.warn("Jev retranslation choice failed for a chunk, using defaults:", err);
+      }
+    })
+  );
+  return result;
+}
+
+// 決定重翻句要採用哪個版本。程式規則判得準的先用規則；語意比較才交給 Jev。
+// 預設（Jev 未設定、失敗或回答 same）採用新譯文：原譯已被標記過至少一個疑點。
+// - 原譯因程式規則被標記：新譯文規則乾淨 → 新譯；仍有問題 → 問 Jev
+// - 原譯只因 Jev 被標記：新譯文反而出現規則問題 → 原譯；否則 → 問 Jev
+export function needsJevChoice(origCodeIssues: string[], newCodeIssues: string[]): boolean {
+  if (origCodeIssues.length > 0) return newCodeIssues.length > 0;
+  return newCodeIssues.length === 0;
+}
+
+export function pickRetranslation(
+  origCodeIssues: string[],
+  newCodeIssues: string[],
+  jevChoice: RetranslationChoice | null
+): "original" | "retranslation" {
+  if (origCodeIssues.length > 0 && newCodeIssues.length === 0) return "retranslation";
+  if (origCodeIssues.length === 0 && newCodeIssues.length > 0) return "original";
+  return jevChoice === "original" ? "original" : "retranslation";
 }

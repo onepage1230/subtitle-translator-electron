@@ -187,3 +187,70 @@ Trinity again
     expect(await run("off")).toEqual({ section: true, synth: true, reconcile: true });
   });
 });
+
+describe("Jev name matching before reconciliation", () => {
+  const setupEpisodes = async () => {
+    const folder = fs.mkdtempSync(path.join(os.tmpdir(), "stx-namematch-"));
+    const ep1 = path.join(folder, "EP1.srt");
+    const ep2 = path.join(folder, "EP2.srt");
+    fs.writeFileSync(ep1, SRT_EP("Yoon Jae-Ha plays"), "utf8");
+    fs.writeFileSync(ep2, `1
+00:00:01,000 --> 00:00:02,000
+Isn't that Jae Ha?
+
+2
+00:00:03,000 --> 00:00:04,000
+Jae Ha took the money from Yoon Jae-Ha
+
+3
+00:00:05,000 --> 00:00:06,000
+Yoon Jae-Ha is famous
+`, "utf8");
+    vi.mocked(translate.analyzeSubtitlesForContext).mockReset()
+      .mockImplementation(async (subs: string[]) => ({
+        plotSummary: "p",
+        glossary: subs.join(" ").includes("Jae Ha")
+          ? [{ term: "Jae Ha", translation: "載河", category: "person" as const }]
+          : [{ term: "Yoon Jae-Ha", translation: "尹在夏", category: "person" as const }],
+      }));
+    await translateFile({ path: ep1, name: "EP1.srt" }, BASE_PARAMS, () => {});
+    vi.mocked(translate.reconcileGlossary).mockClear();
+    return ep2;
+  };
+  const stubJev = (fetchImpl: any) => vi.stubGlobal("fetch", vi.fn(fetchImpl));
+
+  it("skips reconciliation when Jev judges the names to be different people", async () => {
+    const ep2 = await setupEpisodes();
+    stubJev(async (_u: any, init: any) => {
+      const body = JSON.parse(init.body);
+      const answers: any = {};
+      Object.keys(body.questions).forEach((k) => (answers[k] = { noul: 0.05 }));
+      return { ok: true, status: 200, json: async () => ({ answers }) };
+    });
+    await translateFile({ path: ep2, name: "EP2.srt" }, { ...BASE_PARAMS, typesafeApiKey: "K" }, () => {});
+    expect(translate.reconcileGlossary).not.toHaveBeenCalled();
+    vi.unstubAllGlobals();
+  });
+
+  it("passes Jev-confirmed pairs as hints to reconciliation", async () => {
+    const ep2 = await setupEpisodes();
+    stubJev(async (_u: any, init: any) => {
+      const body = JSON.parse(init.body);
+      const answers: any = {};
+      Object.keys(body.questions).forEach((k) => (answers[k] = { noul: 0.95 }));
+      return { ok: true, status: 200, json: async () => ({ answers }) };
+    });
+    await translateFile({ path: ep2, name: "EP2.srt" }, { ...BASE_PARAMS, typesafeApiKey: "K" }, () => {});
+    expect(translate.reconcileGlossary).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(translate.reconcileGlossary).mock.calls[0][2].hints).toEqual([["Jae Ha", "Yoon Jae-Ha"]]);
+    vi.unstubAllGlobals();
+  });
+
+  it("falls back to the heuristic when Jev fails", async () => {
+    const ep2 = await setupEpisodes();
+    stubJev(async () => ({ ok: false, status: 500, json: async () => ({}) }));
+    await translateFile({ path: ep2, name: "EP2.srt" }, { ...BASE_PARAMS, typesafeApiKey: "K" }, () => {});
+    expect(translate.reconcileGlossary).toHaveBeenCalledTimes(1);
+    vi.unstubAllGlobals();
+  });
+});

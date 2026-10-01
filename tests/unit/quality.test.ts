@@ -4,6 +4,9 @@ import {
   isTraditionalChineseTarget,
   isChineseTarget,
   checkWithJev,
+  chooseWithJev,
+  needsJevChoice,
+  pickRetranslation,
 } from "../../electron/main/utils/quality";
 
 const T = { traditional: true, chinese: true, glossary: [] as any[] };
@@ -127,5 +130,48 @@ describe("非中文目標語言", () => {
   it("isChineseTarget 辨識中文目標", () => {
     for (const l of ["繁體中文", "简体中文", "Chinese", "zh-TW", "zh", "Traditional Chinese"]) expect(isChineseTarget(l)).toBe(true);
     for (const l of ["English", "日本語", "Japanese", "한국어", "French", ""]) expect(isChineseTarget(l)).toBe(false);
+  });
+});
+
+describe("chooseWithJev", () => {
+  const items = [
+    { source: "s0", original: "o0", retranslation: "r0" },
+    { source: "s1", original: "o1", retranslation: "r1" },
+  ];
+  it("sends choice questions over pairs and maps answers", async () => {
+    const f = vi.fn(async (_url: any, init: any) => {
+      const body = JSON.parse(init.body);
+      expect(body.state.pairs).toEqual(items);
+      expect(Object.values(body.questions).every((q: any) => q.type === "choice")).toBe(true);
+      expect(Object.keys((body.questions as any).c0.criteria)).toEqual(["original", "retranslation", "same"]);
+      return { ok: true, status: 200, json: async () => ({ answers: { c0: { choice: "original" }, c1: { choice: "same" } } }) } as any;
+    });
+    expect(await chooseWithJev(items, "KEY", { fetchImpl: f as any })).toEqual(["original", "same"]);
+  });
+  it("returns null for a failed request", async () => {
+    const f = vi.fn(async () => ({ ok: false, status: 500, json: async () => ({}) }) as any);
+    expect(await chooseWithJev(items, "KEY", { fetchImpl: f as any })).toEqual([null, null]);
+  });
+});
+
+describe("retranslation selection rules", () => {
+  it("code-flagged: clean retranslation wins without Jev", () => {
+    expect(needsJevChoice(["simplified"], [])).toBe(false);
+    expect(pickRetranslation(["simplified"], [], null)).toBe("retranslation");
+  });
+  it("code-flagged: still dirty → Jev decides, tie keeps retranslation", () => {
+    expect(needsJevChoice(["simplified"], ["simplified"])).toBe(true);
+    expect(pickRetranslation(["simplified"], ["simplified"], "original")).toBe("original");
+    expect(pickRetranslation(["simplified"], ["simplified"], "same")).toBe("retranslation");
+    expect(pickRetranslation(["simplified"], ["simplified"], null)).toBe("retranslation");
+  });
+  it("Jev-flagged: retranslation introducing a code issue loses without Jev", () => {
+    expect(needsJevChoice([], ["untranslated"])).toBe(false);
+    expect(pickRetranslation([], ["untranslated"], null)).toBe("original");
+  });
+  it("Jev-flagged: clean retranslation → Jev decides", () => {
+    expect(needsJevChoice([], [])).toBe(true);
+    expect(pickRetranslation([], [], "original")).toBe("original");
+    expect(pickRetranslation([], [], "retranslation")).toBe("retranslation");
   });
 });

@@ -228,6 +228,24 @@ describe("getOrCreateAnalysis", () => {
     expect(log).toContain("[1.0]");
   });
 
+  it("stores pre-synthesis section summaries in the cache for debugging", async () => {
+    const cacheFile = tmpCacheFile();
+    vi.mocked(translate.analyzeSubtitlesForContext)
+      .mockResolvedValueOnce({ plotSummary: "s1", glossary: [] })
+      .mockResolvedValueOnce({ plotSummary: "s2", glossary: [] })
+      .mockResolvedValueOnce({ plotSummary: "s3", glossary: [] });
+    await getOrCreateAnalysis({
+      texts: ["a", "b", "c"], cacheFile, contentHash: "h",
+      forceReanalyze: true, params: { ...PARAMS, userNotes: "note" },
+    });
+    const cached = JSON.parse(fs.readFileSync(cacheFile, "utf8"));
+    expect(cached.debug.sectionSummaries).toEqual(["s1", "s2", "s3"]);
+    for (const call of vi.mocked(translate.analyzeSubtitlesForContext).mock.calls.slice(-3)) {
+      expect(call[1].userNotes).toBe("note");
+    }
+    expect(readAnalysisCache(cacheFile, "h")!.plotSummary).toBe("synth");
+  });
+
   it("does not report failures when every section succeeds", async () => {
     const onSectionFailures = vi.fn();
     await getOrCreateAnalysis({
