@@ -33,6 +33,8 @@ interface ProgressType {
   };
   failedCues?: number;
   failedKeys?: string[];
+  analysisFailed?: boolean;
+  analysisPartial?: { failed: number; total: number };
 }
 
 export default function TranslatorPanel() {
@@ -52,6 +54,8 @@ export default function TranslatorPanel() {
   const [keys] = useAPIKeys();
   const [apiHost] = useAPIHost();
   const [temperature] = useTemperature();
+  const [typesafeApiKey] = useLocalStorage("typesafe_api_key", "");
+  const [analysisThinkingMode] = useLocalStorage("analysis_thinking_mode", "light");
   const [multiLangSave] = useLocalStorage("multi_language_save", "none");
   const [concurrentRequests] = useLocalStorage<number | undefined>(
     "concurrent_requests",
@@ -130,6 +134,8 @@ export default function TranslatorPanel() {
     delay: delay * 1000,
     forceReanalyze,
     concurrentRequests,
+    typesafeApiKey,
+    analysisThinkingMode,
   });
 
   const executeBatchTranslation = async (forceReanalyze: boolean) => {
@@ -494,6 +500,19 @@ export default function TranslatorPanel() {
                         />
                       </div>
                       <div className="text-xs text-slate-500">{statusText}</div>
+                      {progressData.analysisFailed && (
+                        <div className="text-xs text-amber-600">
+                          {t("translate.analysis_failed")}
+                        </div>
+                      )}
+                      {progressData.analysisPartial && (
+                        <div className="text-xs text-amber-600">
+                          {t("translate.analysis_partial", {
+                            ok: progressData.analysisPartial.total - progressData.analysisPartial.failed,
+                            total: progressData.analysisPartial.total,
+                          })}
+                        </div>
+                      )}
                       {progressData.error && (
                         <div className="text-xs text-red-500">
                           {progressData.error}

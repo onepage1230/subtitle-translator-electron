@@ -4,11 +4,16 @@ import useModel from "../../hooks/useModel";
 import { useEffect, useMemo, useState, useRef } from "react";
 import { useAPIHost, useAPIKeys } from "@/hooks/useOpenAI";
 import { useTemperature } from "../../hooks/useOpenAI";
+import { useLocalStorage } from "usehooks-ts";
 
 export default function Model() {
   const { t } = useTranslation();
   const [model, setModel] = useModel();
   const [temperature, setTemperature] = useTemperature();
+  const [analysisThinkingMode, setAnalysisThinkingMode] = useLocalStorage(
+    "analysis_thinking_mode",
+    "light"
+  );
   const [host] = useAPIHost();
   const [keys] = useAPIKeys();
   const [remoteModels, setRemoteModels] = useState<string[]>([]);
@@ -272,6 +277,25 @@ export default function Model() {
             step="0.01"
           />
         </div>
+      </div>
+
+      {/* Thinking mode during analysis */}
+      <div className="bg-white rounded flex justify-between items-center border border-slate-200 p-4 gap-8">
+        <div className="flex flex-col">
+          <Title>{t("analysisThinkingMode.title")}</Title>
+          <div className="text-sm text-slate-600">
+            {t("analysisThinkingMode.description")}
+          </div>
+        </div>
+        <select
+          value={analysisThinkingMode}
+          onChange={(e) => setAnalysisThinkingMode(e.target.value)}
+          className="w-80 shrink-0 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:bg-white focus:border-slate-400 focus:ring-1 focus:ring-slate-400"
+        >
+          <option value="keep">{t("analysisThinkingMode.keep")}</option>
+          <option value="light">{t("analysisThinkingMode.light")}</option>
+          <option value="off">{t("analysisThinkingMode.off")}</option>
+        </select>
       </div>
     </div>
   );

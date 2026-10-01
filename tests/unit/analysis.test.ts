@@ -195,15 +195,46 @@ describe("getOrCreateAnalysis", () => {
     expect(r!.glossary[0].category).toBe("term");
   });
 
-  it("passes existingGlossary through to every section analysis", async () => {
-    const existing = [{ term: "Neo", translation: "尼歐", category: "person" as const }];
+  it("injects only the series glossary entries that appear in each section", async () => {
+    const neo = { term: "Neo", translation: "尼歐", category: "person" as const };
+    const trinity = { term: "Trinity", translation: "崔妮蒂", category: "person" as const };
+    await getOrCreateAnalysis({
+      texts: ["Neo wakes up", "Trinity calls", "nobody here"], cacheFile: tmpCacheFile(),
+      contentHash: "h", forceReanalyze: false, params: PARAMS, existingGlossary: [neo, trinity],
+    });
+    const injected = vi.mocked(translate.analyzeSubtitlesForContext).mock.calls.map(
+      (call) => call[1].existingGlossary
+    );
+    expect(injected).toEqual([[neo], [trinity], []]);
+  });
+
+  it("reports partial section failures and logs the raw response", async () => {
+    const cacheFile = tmpCacheFile();
+    vi.mocked(translate.analyzeSubtitlesForContext)
+      .mockResolvedValueOnce({ plotSummary: "p1", glossary: [] })
+      .mockRejectedValueOnce(
+        Object.assign(new Error("No JSON value found"), { text: "[1.0]" })
+      )
+      .mockResolvedValueOnce({ plotSummary: "p3", glossary: [] });
+    const onSectionFailures = vi.fn();
+    const r = await getOrCreateAnalysis({
+      texts: ["a", "b", "c"], cacheFile, contentHash: "h",
+      forceReanalyze: true, params: PARAMS, onSectionFailures,
+    });
+    expect(r).not.toBeNull();
+    expect(onSectionFailures).toHaveBeenCalledWith(1, 3);
+    const log = fs.readFileSync(cacheFile.replace(".analysis.json", ".analysis-failures.log"), "utf8");
+    expect(log).toContain("analysis section 2/3");
+    expect(log).toContain("[1.0]");
+  });
+
+  it("does not report failures when every section succeeds", async () => {
+    const onSectionFailures = vi.fn();
     await getOrCreateAnalysis({
       texts: ["a", "b", "c"], cacheFile: tmpCacheFile(), contentHash: "h",
-      forceReanalyze: false, params: PARAMS, existingGlossary: existing,
+      forceReanalyze: true, params: PARAMS, onSectionFailures,
     });
-    for (const call of vi.mocked(translate.analyzeSubtitlesForContext).mock.calls) {
-      expect(call[1].existingGlossary).toEqual(existing);
-    }
+    expect(onSectionFailures).not.toHaveBeenCalled();
   });
 });
 

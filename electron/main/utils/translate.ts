@@ -1,6 +1,7 @@
 import { z } from "zod";
-import { generateObject, generateText, tool } from "ai";
+import { generateText, tool } from "ai";
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
+import { generateJson } from "./jsonOutput";
 
 const glossaryCategorySchema = z.enum(["person", "place", "organization", "term"]);
 
@@ -18,6 +19,16 @@ const analysisSchema = z.object({
 type AnalysisResult = z.infer<typeof analysisSchema>;
 type GlossaryCategory = z.infer<typeof glossaryCategorySchema>;
 type GlossaryEntry = z.infer<typeof glossaryEntrySchema>;
+
+// Qwen3 等推理模型在 oMLX/vLLM 上可用 chat_template_kwargs 關閉 thinking。
+// 實測分析一段：thinking 開 1003 秒（2 萬 token reasoning），關 17–30 秒，輸出品質相近。
+// openai-compatible provider 會把 providerOptions.openai 的鍵原樣放進 request body；
+// 非 Qwen 系伺服器可能忽略或拒絕此欄位，所以由設定開關控制。
+function noThinkingOptions(disableThinking?: boolean) {
+  return disableThinking
+    ? { openai: { chat_template_kwargs: { enable_thinking: false } } }
+    : undefined;
+}
 
 function getAi({ apiKey, apiHost }: { apiKey: string; apiHost: string }) {
   return createOpenAICompatible({
@@ -123,15 +134,16 @@ async function translateSubtitleChunk(
 
   // Layer 2: JSON object generation
   try {
-    const { object } = await generateObject({
+    const object = await generateJson({
       model: ai(model),
       temperature,
-      schema: z.array(z.string().describe("The translated subtitles")),
+      schema: z.array(z.string()),
       prompt:
         systemPrompt +
-        "\nOutput must be valid json. Respond with a JSON object that matches the schema. Return only JSON.\n\n" +
+        "\nOutput must be valid json. Reply ONLY with a JSON array of translated strings, same length and order as the input.\n\n" +
         JSON.stringify(subtitles),
-      maxRetries: 3,
+      attempts: 1,
+      label: "Chunk translation JSON",
     });
     if (Array.isArray(object) && object.length === subtitles.length) {
       return object;
@@ -224,20 +236,34 @@ async function translateSubtitleSingle(
     }
 
     // Fallback 2: JSON object generation
-    const { object } = await generateObject({
+    const object = await generateJson({
       model: ai(model),
       temperature,
       schema: z.object({ result: z.string() }),
       prompt:
         systemPrompt +
-        "\nOutput must be valid json. Respond with a JSON object that matches the schema. Return only JSON.\n\n" +
+        '\nOutput must be valid json. Reply ONLY with a JSON object of this shape: {"result": "<translation>"}\n\n' +
         JSON.stringify(subtitle),
-      maxRetries: 3,
+      attempts: 1,
+      label: "Single translation JSON",
     });
     return object.result;
   } catch (e: any) {
     throw e;
   }
+}
+
+function unwrapSingleElementArray(value: unknown): unknown {
+  if (
+    Array.isArray(value) &&
+    value.length === 1 &&
+    value[0] &&
+    typeof value[0] === "object" &&
+    !Array.isArray(value[0])
+  ) {
+    return value[0];
+  }
+  return value;
 }
 
 async function analyzeSubtitlesForContext(
@@ -249,6 +275,7 @@ async function analyzeSubtitlesForContext(
     lang,
     temperature = 0.3,
     existingGlossary,
+    disableThinking,
   }: {
     apiKeys: string[];
     apiHost: string;
@@ -256,6 +283,7 @@ async function analyzeSubtitlesForContext(
     lang: string;
     temperature?: number;
     existingGlossary?: GlossaryEntry[];
+    disableThinking?: boolean;
   }
 ): Promise<AnalysisResult> {
   if (apiKeys.length === 0) {
@@ -270,19 +298,29 @@ async function analyzeSubtitlesForContext(
           .join("\n")}\nIf a new term appears to be a shorter form, alias, or romanization variant of an established term (e.g. the given name of an established full name), derive its translation from the established translation instead of creating an unrelated one.`
       : "";
 
-  const { object } = await generateObject({
+  // 本機模型（openai-compatible 未開 structuredOutputs）不會收到 JSON schema，
+  // 只看得到 prompt；沒寫明格式時曾回傳 ["plotSummary","glossary"] 或把輸入
+  // 字幕原樣當陣列回傳。所以在 system prompt 明寫輸出形狀，格式錯時再試一次。
+  const system = `You are a subtitle content analyst for a translation system.
+Analyze the provided subtitle sample and return:
+1. plotSummary: A ${lang} narrative (5–10 sentences) describing what happens. Write naturally, not as a literal stitch of subtitles. Describe only characters who actually appear in this sample, and do not guess relationships the dialogue does not support.
+2. glossary: Up to 15 entries of proper nouns ONLY — person names (category "person"), place names ("place"), organization or group names ("organization"), and titles, fictional terms or domain-specific jargon ("term"). Do NOT include common nouns, everyday vocabulary, or full sentences. For each entry provide the term as it appears, its preferred ${lang} translation or rendering (repeat the original term if no translation exists), and its category. If you recognize the work and an official or widely-used ${lang} translation of a name exists (e.g. from official subtitles or publications), prefer it over inventing a new rendering. When the same person appears under multiple forms (full name, given name only, nickname, romanization variants), create one entry per form and keep their translations mutually consistent: romanization variants of the same name must share the identical translation, and a shorter form's translation must be the corresponding part of the full name's translation — never render the same person's name two different ways.${existingSection}
+
+Output format: reply with ONE JSON object and nothing else, exactly this shape:
+{"plotSummary": "<${lang} summary>", "glossary": [{"term": "<as in subtitles>", "translation": "<${lang} rendering>", "category": "person" | "place" | "organization" | "term"}]}
+Do NOT return a JSON array. Do NOT echo or translate the subtitle lines.`;
+
+  return generateJson({
     model: ai(model),
     temperature,
     schema: analysisSchema,
-    system: `You are a subtitle content analyst for a translation system.
-Analyze the provided subtitle sample and return:
-1. plotSummary: A ${lang} narrative (5–10 sentences) describing what happens. Write naturally, not as a literal stitch of subtitles.
-2. glossary: Up to 15 entries of proper nouns ONLY — person names (category "person"), place names ("place"), organization or group names ("organization"), and titles, fictional terms or domain-specific jargon ("term"). Do NOT include common nouns, everyday vocabulary, or full sentences. For each entry provide the term as it appears, its preferred ${lang} translation or rendering (repeat the original term if no translation exists), and its category. If you recognize the work and an official or widely-used ${lang} translation of a name exists (e.g. from official subtitles or publications), prefer it over inventing a new rendering. When the same person appears under multiple forms (full name, given name only, nickname, romanization variants), create one entry per form and keep their translations mutually consistent: romanization variants of the same name must share the identical translation, and a shorter form's translation must be the corresponding part of the full name's translation — never render the same person's name two different ways.${existingSection}`,
+    system,
     prompt: `Analyze this subtitle sample:\n\n` + subtitles.join("\n"),
-    maxRetries: 2,
+    // 模型有時把物件包成單元素陣列 [{...}]，拆掉外層再驗證
+    normalize: unwrapSingleElementArray,
+    providerOptions: noThinkingOptions(disableThinking),
+    label: "Analysis",
   });
-
-  return object;
 }
 
 async function synthesizePlotSummaries(
@@ -293,12 +331,14 @@ async function synthesizePlotSummaries(
     model,
     lang,
     temperature = 0.3,
+    disableThinking,
   }: {
     apiKeys: string[];
     apiHost: string;
     model: string;
     lang: string;
     temperature?: number;
+    disableThinking?: boolean;
   }
 ): Promise<string> {
   if (apiKeys.length === 0 || summaries.length === 0) {
@@ -315,27 +355,44 @@ async function synthesizePlotSummaries(
     temperature,
     system: `You are a plot summarizer. Combine the provided partial summaries into one coherent ${lang} narrative. Preserve chronological order. Do not introduce information not present in the parts.`,
     prompt: `Synthesize these partial summaries into one coherent summary:\n\n${numbered}`,
+    providerOptions: noThinkingOptions(disableThinking),
     maxRetries: 2,
   });
 
   return result.text;
 }
 
-// 小模型常把調和結果回成扁平 map（{"term": "譯名 (category)"}）而非 schema
-// 要求的 { glossary: [...] }，導致驗證失敗。這裡從錯誤附帶的原始文字解析
-// 幾種固定的錯誤形狀；修復結果仍會經過 enforceReconciliation 的防護
-// （LOCKED 還原、發明條目丟棄），所以寬鬆解析是安全的。
+// 本機模型看不到 schema，調和結果的形狀每次都可能不同。實測過的形狀：
+// { glossary: [...] }（正確）、裸條目陣列、扁平 map {"term": "譯名 (category)"}、
+// 字串陣列 ["term: 譯名 (category)"]、包在單元素陣列裡的扁平 map、
+// 欄位名稱不同的條目 {"entry", "translation", "type"}。這裡全部轉成條目陣列；
+// 結果仍會經過 enforceReconciliation 的防護（LOCKED 還原、發明條目丟棄），
+// 所以寬鬆解析是安全的。無法辨識時回傳 null。
+const CATEGORY_SUFFIX = /^(.*?)\s*[（(]\s*(person|place|organization|term)\s*[）)]$/i;
+
 function repairReconciledGlossary(
-  rawText: string,
+  value: unknown,
   knownEntries: GlossaryEntry[]
 ): GlossaryEntry[] | null {
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(rawText);
-  } catch {
-    return null;
-  }
-  // 有 glossary 包裹但內容形狀錯誤 → 拆掉外層再解析
+  const categoryByTerm = new Map(
+    knownEntries.map((e) => [e.term.toLowerCase(), e.category])
+  );
+  const toCategory = (raw: unknown, term: string): GlossaryCategory => {
+    const c = typeof raw === "string" ? raw.toLowerCase() : "";
+    return glossaryCategorySchema.safeParse(c).success
+      ? (c as GlossaryCategory)
+      : categoryByTerm.get(term.toLowerCase()) ?? "term";
+  };
+  const fromPair = (term: string, raw: unknown): GlossaryEntry | null => {
+    if (typeof raw !== "string" || !raw.trim() || !term.trim()) return null;
+    const m = raw.trim().match(CATEGORY_SUFFIX);
+    const translation = (m ? m[1] : raw).trim();
+    if (!translation) return null;
+    return { term: term.trim(), translation, category: toCategory(m?.[2], term) };
+  };
+
+  let parsed = value;
+  // 有 glossary 包裹 → 拆掉外層
   if (
     parsed &&
     typeof parsed === "object" &&
@@ -344,36 +401,51 @@ function repairReconciledGlossary(
   ) {
     parsed = (parsed as Record<string, unknown>).glossary;
   }
-  // 裸的條目陣列（少了包裹物件）
+
   if (Array.isArray(parsed)) {
-    const entries = parsed.filter(
-      (e: any) =>
-        e && typeof e.term === "string" && typeof e.translation === "string"
-    );
-    return entries.length
-      ? entries.map((e: any) => ({ ...e, category: e.category ?? "term" }))
-      : null;
+    if (parsed.length === 0) return null;
+    // 字串陣列：["Jae-Ha: 宰河 (person)", ...]
+    if (parsed.every((e) => typeof e === "string")) {
+      const entries: GlossaryEntry[] = [];
+      for (const line of parsed as string[]) {
+        const idx = line.indexOf(":");
+        const entry = idx > 0 ? fromPair(line.slice(0, idx), line.slice(idx + 1)) : null;
+        if (!entry) return null;
+        entries.push(entry);
+      }
+      return entries;
+    }
+    // 條目陣列（欄位名稱可能是 term/entry/name 與 category/type）
+    const items = parsed as any[];
+    const asEntries = items
+      .map((e) => {
+        if (!e || typeof e !== "object") return null;
+        const term = e.term ?? e.entry ?? e.name;
+        if (typeof term !== "string" || typeof e.translation !== "string") return null;
+        if (!term.trim() || !e.translation.trim()) return null;
+        return {
+          term: term.trim(),
+          translation: e.translation.trim(),
+          category: toCategory(e.category ?? e.type, term),
+        };
+      })
+      .filter((e): e is GlossaryEntry => e !== null);
+    if (asEntries.length) return asEntries;
+    // 包在單元素陣列裡的扁平 map：[{"Jae-Ha": "宰河", ...}]
+    if (items.length === 1 && items[0] && typeof items[0] === "object") {
+      parsed = items[0];
+    } else {
+      return null;
+    }
   }
-  if (!parsed || typeof parsed !== "object") return null;
-  // 扁平 map：值為「譯名」或「譯名 (category)」；category 缺漏時沿用輸入條目的
-  const categoryByTerm = new Map(
-    knownEntries.map((e) => [e.term.toLowerCase(), e.category])
-  );
+
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return null;
+  // 扁平 map：值為「譯名」或「譯名 (category)」
   const entries: GlossaryEntry[] = [];
-  for (const [term, value] of Object.entries(
-    parsed as Record<string, unknown>
-  )) {
-    if (typeof value !== "string" || !value.trim()) return null;
-    const m = value
-      .trim()
-      .match(/^(.*?)\s*[（(]\s*(person|place|organization|term)\s*[）)]$/i);
-    const translation = (m ? m[1] : value).trim();
-    if (!translation) return null;
-    const category =
-      (m?.[2].toLowerCase() as GlossaryCategory | undefined) ??
-      categoryByTerm.get(term.toLowerCase()) ??
-      "term";
-    entries.push({ term, translation, category });
+  for (const [term, raw] of Object.entries(parsed as Record<string, unknown>)) {
+    const entry = fromPair(term, raw);
+    if (!entry) return null;
+    entries.push(entry);
   }
   return entries.length ? entries : null;
 }
@@ -387,12 +459,14 @@ async function reconcileGlossary(
     model,
     lang,
     temperature = 0.3,
+    disableThinking,
   }: {
     apiKeys: string[];
     apiHost: string;
     model: string;
     lang: string;
     temperature?: number;
+    disableThinking?: boolean;
   }
 ): Promise<GlossaryEntry[]> {
   if (apiKeys.length === 0) {
@@ -407,34 +481,30 @@ async function reconcileGlossary(
     ? `LOCKED entries (translations are final, do NOT change them):\n${formatEntries(lockedEntries)}\n\n`
     : "";
 
-  try {
-    const { object } = await generateObject({
-      model: ai(model),
-      temperature,
-      schema: z.object({ glossary: z.array(glossaryEntrySchema) }),
-      system: `You are a glossary reconciler for a subtitle translation system.
+  const knownEntries = [...lockedEntries, ...newEntries];
+  const { glossary } = await generateJson({
+    model: ai(model),
+    temperature,
+    schema: z.object({ glossary: z.array(glossaryEntrySchema) }),
+    normalize: (value) => {
+      const repaired = repairReconciledGlossary(value, knownEntries);
+      return repaired ? { glossary: repaired } : value;
+    },
+    system: `You are a glossary reconciler for a subtitle translation system.
 Different surface forms often refer to the same person: romanization variants of the same name, a full name vs. a given name only, or nicknames.
 Rules:
 1. Never change the translation of a LOCKED entry.
 2. Romanization variants of the same name must share the identical translation.
 3. A given-name-only or nickname form must match the corresponding part of the full name's ${lang} translation.
-4. Return ALL provided entries with corrected translations. Do NOT invent entries that were not provided.`,
-      prompt: `${lockedSection}NEW entries to reconcile:\n${formatEntries(newEntries)}`,
-      maxRetries: 2,
-    });
-    return object.glossary;
-  } catch (err: any) {
-    // schema 驗證失敗時，錯誤會帶著模型的原始回應文字（NoObjectGeneratedError.text）
-    const rawText = typeof err?.text === "string" ? err.text : undefined;
-    const repaired = rawText
-      ? repairReconciledGlossary(rawText, [...lockedEntries, ...newEntries])
-      : null;
-    if (!repaired) throw err;
-    console.warn(
-      "Glossary reconciliation schema mismatch; repaired flat-shape response."
-    );
-    return repaired;
-  }
+4. Return ALL provided entries with corrected translations. Do NOT invent entries that were not provided.
+
+Output format: reply with ONE JSON object and nothing else, exactly this shape:
+{"glossary": [{"term": "<term as provided>", "translation": "<${lang} rendering>", "category": "person" | "place" | "organization" | "term"}]}`,
+    prompt: `${lockedSection}NEW entries to reconcile:\n${formatEntries(newEntries)}`,
+    providerOptions: noThinkingOptions(disableThinking),
+    label: "Glossary reconciliation",
+  });
+  return glossary;
 }
 
 export type { AnalysisResult, GlossaryCategory, GlossaryEntry };
@@ -445,4 +515,5 @@ export {
   synthesizePlotSummaries,
   reconcileGlossary,
   parseNumberedList,
+  unwrapSingleElementArray,
 };

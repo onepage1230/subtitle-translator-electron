@@ -36,17 +36,18 @@ beforeEach(() => {
     .mockImplementation(async (entries: any[]) => entries);
 });
 
-it("episode 2 analysis receives episode 1 glossary; series file accumulates", async () => {
+it("episode 2 analysis receives the episode 1 terms it mentions; series file accumulates", async () => {
   const folder = fs.mkdtempSync(path.join(os.tmpdir(), "stx-series-"));
   const ep1 = path.join(folder, "EP1.srt");
   const ep2 = path.join(folder, "EP2.srt");
   fs.writeFileSync(ep1, SRT_EP("Neo appears"), "utf8");
-  fs.writeFileSync(ep2, SRT_EP("Trinity appears"), "utf8");
+  // 分析只注入本段出現過的劇集詞條，所以 EP2 要提到 Neo 才會收到
+  fs.writeFileSync(ep2, SRT_EP("Trinity meets Neo"), "utf8");
 
   vi.mocked(translate.analyzeSubtitlesForContext).mockReset()
     .mockImplementation(async (subs: string[]) => ({
       plotSummary: "p",
-      glossary: subs.join(" ").includes("Neo")
+      glossary: !subs.join(" ").includes("Trinity")
         ? [{ term: "Neo", translation: "尼歐", category: "person" as const }]
         : [{ term: "Trinity", translation: "崔妮蒂", category: "person" as const }],
     }));
@@ -136,4 +137,53 @@ it("falls back to the raw glossary when reconciliation fails", async () => {
   expect(events[events.length - 1].status).toBe("done");
   const terms = loadSeriesGlossary(folder).terms.map((t) => t.term).sort();
   expect(terms).toEqual(["Hong Hye-in", "Hyein"]);
+});
+
+// 段落分析需要推理人物關係（關閉 thinking 時 E02 摘要錯置人物），調和與合成不需要
+describe("analysisThinkingMode", () => {
+  const SRT_3 = `1
+00:00:01,000 --> 00:00:02,000
+Neo and Trinity
+
+2
+00:00:03,000 --> 00:00:04,000
+Neo again
+
+3
+00:00:05,000 --> 00:00:06,000
+Trinity again
+`;
+  const run = async (mode?: "keep" | "light" | "off") => {
+    const folder = fs.mkdtempSync(path.join(os.tmpdir(), "stx-think-"));
+    const file = path.join(folder, "EP1.srt");
+    fs.writeFileSync(file, SRT_3, "utf8");
+    vi.mocked(translate.analyzeSubtitlesForContext).mockReset().mockResolvedValue({
+      plotSummary: "p",
+      glossary: [
+        { term: "Neo", translation: "尼歐", category: "person" },
+        { term: "Trinity", translation: "崔妮蒂", category: "person" },
+      ],
+    });
+    await translateFile(
+      { path: file, name: "EP1.srt" },
+      { ...BASE_PARAMS, analysisThinkingMode: mode },
+      () => {}
+    );
+    return {
+      section: vi.mocked(translate.analyzeSubtitlesForContext).mock.calls[0][1].disableThinking,
+      synth: vi.mocked(translate.synthesizePlotSummaries).mock.calls[0][1].disableThinking,
+      reconcile: vi.mocked(translate.reconcileGlossary).mock.calls[0][2].disableThinking,
+    };
+  };
+
+  it("light (default) keeps thinking only for section analysis", async () => {
+    expect(await run(undefined)).toEqual({ section: false, synth: true, reconcile: true });
+    expect(await run("light")).toEqual({ section: false, synth: true, reconcile: true });
+  });
+  it("keep never disables thinking", async () => {
+    expect(await run("keep")).toEqual({ section: false, synth: false, reconcile: false });
+  });
+  it("off disables thinking everywhere", async () => {
+    expect(await run("off")).toEqual({ section: true, synth: true, reconcile: true });
+  });
 });

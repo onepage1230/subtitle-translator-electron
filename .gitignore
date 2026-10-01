@@ -40,3 +40,6 @@ yarn.lock
 /.codegraph/
 /.superpowers/
 skills-lock.json
+
+# 本機測試用字幕
+/tmp/

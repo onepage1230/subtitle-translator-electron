@@ -100,6 +100,22 @@ function analysisCachePath(filePath: string): string {
   return filePath.replace(/\.[^/.]+$/, "") + ".analysis.json";
 }
 
+// 模型回應格式錯誤時把原始回應附加到 <檔名>.analysis-failures.log，
+// 失敗樣本才能留下來當回歸測試 fixture（console 跑完就沒了）
+function appendAnalysisFailureLog(cacheFile: string, label: string, err: unknown): void {
+  const raw = (err as any)?.text;
+  const logFile = cacheFile.replace(/\.analysis\.json$/, "") + ".analysis-failures.log";
+  const entry = [
+    `=== ${new Date().toISOString()} ${label}`,
+    `error: ${(err as any)?.message ?? String(err)}`,
+    typeof raw === "string" ? `response:\n${raw}` : "response: (none)",
+    "",
+  ].join("\n");
+  try {
+    fs.appendFileSync(logFile, entry + "\n", "utf8");
+  } catch {}
+}
+
 function readAnalysisCache(
   cacheFile: string,
   contentHash: string
@@ -129,10 +145,12 @@ async function getOrCreateAnalysis(opts: {
   cacheFile: string;
   contentHash: string;
   forceReanalyze: boolean;
-  params: { apiKeys: string[]; apiHost: string; model: string; lang: string };
+  params: { apiKeys: string[]; apiHost: string; model: string; lang: string; disableThinking?: boolean; disableAuxThinking?: boolean };
   existingGlossary?: GlossaryEntry[];
+  // 有段落失敗時回報（含全部失敗）；讀快取時不呼叫
+  onSectionFailures?: (failed: number, total: number) => void;
 }): Promise<AnalysisResult | null> {
-  const { texts, cacheFile, contentHash, forceReanalyze, params, existingGlossary } = opts;
+  const { texts, cacheFile, contentHash, forceReanalyze, params, existingGlossary, onSectionFailures } = opts;
 
   if (!forceReanalyze) {
     const cached = readAnalysisCache(cacheFile, contentHash);
@@ -145,18 +163,28 @@ async function getOrCreateAnalysis(opts: {
   ).filter((s) => s.length > 0);
 
   const sectionResults = await Promise.all(
-    sections.map((section) =>
+    sections.map((section, i) =>
       analyzeSubtitlesForContext(section, {
         apiKeys: params.apiKeys,
         apiHost: params.apiHost,
         model: params.model,
         lang: params.lang,
         temperature: 0.3,
-        existingGlossary,
-      }).catch(() => null)
+        // 只注入本段字幕實際出現的詞條：整份劇集詞彙表加上 "MUST reuse" 會讓模型把
+        // 本段沒出場的角色寫進摘要（E02 童年篇被寫成 E01 的成年人名，2026-10-01 實驗）
+        existingGlossary: existingGlossary && filterGlossaryForText(existingGlossary, section),
+        disableThinking: params.disableThinking,
+      }).catch((err) => {
+        console.warn(`Analysis section ${i + 1}/${sections.length} failed:`, err);
+        appendAnalysisFailureLog(cacheFile, `analysis section ${i + 1}/${sections.length}`, err);
+        return null;
+      })
     )
   );
   const validResults = sectionResults.filter((r): r is AnalysisResult => r !== null);
+  if (validResults.length < sections.length) {
+    onSectionFailures?.(sections.length - validResults.length, sections.length);
+  }
   if (validResults.length === 0) return null;
 
   const mergedGlossary = mergeGlossaries(validResults.map((r) => r.glossary));
@@ -173,6 +201,7 @@ async function getOrCreateAnalysis(opts: {
         model: params.model,
         lang: params.lang,
         temperature: 0.3,
+        disableThinking: params.disableAuxThinking,
       });
     } catch {
       plotSummary = summaries.map((s, i) => `[Act ${i + 1}]\n${s}`).join("\n\n");
@@ -193,6 +222,7 @@ export {
   filterGlossaryForText,
   alignPlotSummaryWithGlossary,
   analysisCachePath,
+  appendAnalysisFailureLog,
   readAnalysisCache,
   getOrCreateAnalysis,
 };

@@ -13,6 +13,13 @@
     "searchOrEnterModel": "搜索或输入模型名称",
     "noModelsFound": "找不到模型",
     "pressEnterToUse": "按 Enter 使用",
+    "analysisThinkingMode": {
+      "title": "分析时的思考模式",
+      "description": "推理模型（如 Qwen3）在全局分析时是否输出思考过程。保留思考较准确但很慢；关闭需服务器支持 chat_template_kwargs，不支持而报错时请选「全部保留思考」。",
+      "keep": "全部保留思考",
+      "light": "只在调和与合成时关闭（建议）",
+      "off": "全部关闭（最快，但剧情摘要可能搞错人物）"
+    },
     "temperature": {
       "title": "溫度",
       "description": "采樣溫度影響語言模型生成文本的隨機性與確定性。較低的溫度（如 0.2）產生較確定、精確的文本，適合正式文件；而較高的溫度（如 0.8）則讓文本更具創意和多樣性，適合創作用途。通过适当调整这个参数，可以让模型输出更符合特定的使用需求。"
@@ -31,6 +38,10 @@
         "name": "API 密钥",
         "description": "您可以选择供应商（例如 OpenRouter、OpenAI 等）并在该供应商创建 API 密钥。",
         "notify": "注意：费用由各供应商计费，请确认您的账号状态正常并已设置付款方式。"
+      },
+      "typesafe": {
+        "name": "TypeSafe API 密钥（选填）",
+        "description": "填入后会用 TypeSafe Jev 检查译文硬伤并自动重翻；留空则只做本机检查。"
       },
       "host": {
         "name": "API 主机",
@@ -106,6 +117,8 @@
       "file_removed": "档案已移除",
       "no_completed_files": "没有已完成的档案可清除",
       "cleared_files": "已清除 {{count}} 个已完成档案",
+      "analysis_failed": "全局分析失败，本次翻译未使用词汇表与剧情摘要",
+      "analysis_partial": "全局分析部分失败（{{ok}}/{{total}} 段成功），词汇表与剧情摘要可能不完整",
       "analyzing_context": "分析上下文",
       "close": "关闭",
       "context": {

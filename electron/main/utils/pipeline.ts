@@ -5,7 +5,8 @@ import { makeKey } from "../../shared/subtitleKey";
 import type { AnalysisResult } from "./translate";
 import { translateSubtitleChunk, translateSubtitleSingle, reconcileGlossary } from "./translate";
 import { splitIntoChunk, parseSubtitle, saveTranslated, normalizeCues } from "./subtitle";
-import { hashContent, analysisCachePath, getOrCreateAnalysis, formatAnalysisContext, alignPlotSummaryWithGlossary, filterGlossaryForText } from "./analysis";
+import { hashContent, analysisCachePath, appendAnalysisFailureLog, getOrCreateAnalysis, formatAnalysisContext, alignPlotSummaryWithGlossary, filterGlossaryForText } from "./analysis";
+import { detectCodeIssues, isTraditionalChineseTarget, isChineseTarget, checkWithJev } from "./quality";
 import {
   loadSeriesGlossary,
   mergeIntoSeriesGlossary,
@@ -64,6 +65,8 @@ async function retryTranslate(fn, params, maxRetries = 5, delay = 1000) {
   }
 }
 
+export type AnalysisThinkingMode = "keep" | "light" | "off";
+
 export interface TranslateParams {
   apiKeys: string[];
   apiHost?: string;
@@ -77,6 +80,10 @@ export interface TranslateParams {
   contextSize?: number;
   concurrentRequests?: number;
   forceReanalyze?: boolean;
+  typesafeApiKey?: string;
+  // 分析步驟的推理模型 thinking：keep 全保留；light 只在摘要合成與詞彙表調和關閉
+  // （段落分析需要推理人物關係，關閉時 E02 摘要錯置人物，2026-10-01 實驗）；off 全關
+  analysisThinkingMode?: AnalysisThinkingMode;
 }
 
 export interface ProgressEvent {
@@ -89,6 +96,10 @@ export interface ProgressEvent {
   error?: string;
   failedCues?: number;
   failedKeys?: string[];
+  qualityFlagged?: number;
+  analysisFailed?: boolean;
+  // 部分段落分析失敗（仍有結果）；全部失敗時只設 analysisFailed
+  analysisPartial?: { failed: number; total: number };
 }
 
 export async function translateFile(
@@ -179,6 +190,8 @@ export async function translateFile(
 
     const baseAdditional = params.additional || "";
     let analysisData: AnalysisResult | null = null;
+    let analysisFailed = false;
+    let analysisPartial: { failed: number; total: number } | undefined;
 
     const folder = path.dirname(file.path);
     const { terms: seriesTerms, excluded: seriesExcluded } = loadSeriesGlossary(folder);
@@ -194,8 +207,13 @@ export async function translateFile(
           apiHost: params.apiHost || "https://api.openai.com/v1",
           model: params.model || "",
           lang: params.lang || "",
+          disableThinking: params.analysisThinkingMode === "off",
+          disableAuxThinking: (params.analysisThinkingMode ?? "light") !== "keep",
         },
         existingGlossary: seriesTerms,
+        onSectionFailures: (failed, total) => {
+          if (failed < total) analysisPartial = { failed, total };
+        },
       });
       if (analysisData) {
         // 詞彙表調和：讓模型認出同一人物的變體（羅馬拼音差異、全名/簡稱），
@@ -215,6 +233,7 @@ export async function translateFile(
               model: params.model || "",
               lang: params.lang || "",
               temperature: 0.3,
+              disableThinking: (params.analysisThinkingMode ?? "light") !== "keep",
             });
             episodeGlossary = enforceReconciliation(
               reconciled,
@@ -223,6 +242,7 @@ export async function translateFile(
             );
           } catch (reconcileErr) {
             console.warn("Glossary reconciliation failed, using raw glossary:", reconcileErr);
+            appendAnalysisFailureLog(cacheFile, "glossary reconciliation", reconcileErr);
           }
         }
         const combinedGlossary = mergeIntoSeriesGlossary(seriesTerms, episodeGlossary, seriesExcluded);
@@ -236,8 +256,12 @@ export async function translateFile(
         );
         analysisData = { plotSummary: alignedSummary, glossary: combinedGlossary };
         onProgress({ filePath: file.path, progress: 4, status: "analyzing", totalCues, currentCue: 0, analysis: analysisData });
+      } else {
+        analysisFailed = true;
+        console.warn("Context analysis returned no result, continue without it");
       }
     } catch (analysisErr) {
+      analysisFailed = true;
       console.warn("Context analysis failed, continue without it:", analysisErr);
     }
 
@@ -258,6 +282,8 @@ export async function translateFile(
       totalCues,
       currentCue: 0,
       analysis: analysisData,
+      analysisFailed,
+      analysisPartial,
     });
 
     // Translate
@@ -429,8 +455,72 @@ export async function translateFile(
         ? Math.max(1, Math.min(20, params.concurrentRequests))
         : defaultConcurrency;
 
+    // 記下 resume 預填（已有譯文）的句子：品質檢查只針對本次新翻的句子
+    const prefilled = new Set<any>(
+      subtitle.filter((c: any) => c?.data?.translatedText)
+    );
+
     for await (const _ of pool(concurrency, chunks, chunkProcessor)) {
       // Process chunks in parallel
+    }
+
+    // 翻譯後品質檢查：把硬傷句清空，交給下方逐句 fallback 重翻（僅一次）
+    const originalTranslations = new Map<any, string>();
+    let codeFlagged = 0;
+    let jevFlagged = 0;
+    try {
+      const candidates = subtitle.filter((c: any) => {
+        const tt = c?.data?.translatedText;
+        return (
+          !prefilled.has(c) &&
+          String(c?.data?.text ?? "").trim() &&
+          typeof tt === "string" &&
+          tt.trim() &&
+          tt !== "__FAILED__"
+        );
+      });
+      const flagged = new Set<any>();
+      const traditional = isTraditionalChineseTarget(params.lang || "");
+      const chinese = traditional || isChineseTarget(params.lang || "");
+      const glossary = analysisData?.glossary ?? [];
+      const reasons = new Map<any, string[]>();
+      for (const c of candidates) {
+        const issues = detectCodeIssues(c.data.text, c.data.translatedText, { traditional, chinese, glossary });
+        if (issues.length > 0) {
+          flagged.add(c);
+          reasons.set(c, issues);
+          codeFlagged++;
+        }
+      }
+      const jevEnabled = !!params.typesafeApiKey;
+      if (jevEnabled && candidates.length > 0) {
+        const verdicts = await checkWithJev(
+          candidates.map((c: any) => ({ source: c.data.text, translation: c.data.translatedText })),
+          params.typesafeApiKey
+        );
+        candidates.forEach((c: any, i: number) => {
+          if (verdicts[i]) {
+            jevFlagged++;
+            flagged.add(c);
+            reasons.set(c, [...(reasons.get(c) ?? []), "jev"]);
+          }
+        });
+      }
+      for (const c of flagged) {
+        originalTranslations.set(c, c.data.translatedText);
+        c.data.translatedText = "";
+      }
+      // Jev 未設定時明示 skipped，避免與「有檢查但 0 句」混淆
+      console.log(
+        `Quality check: ${flagged.size} flagged for retranslation (code issues: ${codeFlagged}, Jev: ${jevEnabled ? jevFlagged : "skipped (no TypeSafe API key)"})`
+      );
+      for (const c of flagged) {
+        console.log(
+          `  [${(reasons.get(c) ?? []).join(", ")}] ${JSON.stringify(c.data.text)} → ${JSON.stringify(originalTranslations.get(c))}`
+        );
+      }
+    } catch (qualityErr) {
+      console.warn("Quality check failed, skipping:", qualityErr);
     }
 
     // Fallback for untranslated
@@ -456,9 +546,15 @@ export async function translateFile(
             cue.data.text
           );
         } catch (lineErr) {
-          console.warn("Line-level fallback failed, marking as __FAILED__:", lineErr);
-          cue.data.translatedText = "__FAILED__";
-          failedKeys.add(makeKey(cue.data.start, cue.data.end));
+          const original = originalTranslations.get(cue);
+          if (original !== undefined) {
+            console.warn("Quality retranslation failed, keeping original translation:", lineErr);
+            cue.data.translatedText = original;
+          } else {
+            console.warn("Line-level fallback failed, marking as __FAILED__:", lineErr);
+            cue.data.translatedText = "__FAILED__";
+            failedKeys.add(makeKey(cue.data.start, cue.data.end));
+          }
         }
         const currentCueIndex = subtitle.findIndex((c: any) => c === cue);
         if (currentCueIndex !== -1) {
@@ -508,6 +604,9 @@ export async function translateFile(
       analysis: analysisData,
       failedCues: failedKeys.size,
       failedKeys: Array.from(failedKeys),
+      qualityFlagged: originalTranslations.size,
+      analysisFailed,
+      analysisPartial,
     });
   } catch (e) {
     console.error(`Batch translation error for ${file.path}:`, e);
