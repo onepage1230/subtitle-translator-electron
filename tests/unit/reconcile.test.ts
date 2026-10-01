@@ -51,6 +51,18 @@ describe("reconcileGlossary", () => {
     expect(prompt).toMatch(/NEW/);
   });
 
+  it("appends confirmed same-person pairs as hints", async () => {
+    await reconcileGlossary(NEW_ENTRIES, LOCKED, { ...OPTS, hints: [["Baek Hyun-woo", "Baek Hyeon-woo"]] });
+    const { prompt } = generateTextMock.mock.calls[0][0];
+    expect(prompt).toMatch(/confirmed to be the same person/);
+    expect(prompt).toContain("- Baek Hyun-woo = Baek Hyeon-woo");
+  });
+
+  it("omits the hint section when there are no hints", async () => {
+    await reconcileGlossary(NEW_ENTRIES, LOCKED, OPTS);
+    expect(generateTextMock.mock.calls[0][0].prompt).not.toMatch(/confirmed to be the same person/);
+  });
+
   it("omits the locked section when no series glossary exists", async () => {
     await reconcileGlossary(NEW_ENTRIES, [], OPTS);
     const { prompt } = generateTextMock.mock.calls[0][0];

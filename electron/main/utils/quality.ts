@@ -61,7 +61,7 @@ export function detectCodeIssues(
   return issues;
 }
 
-const JEV_URL = "https://api.typesafe.ai/v1/systemone";
+export const JEV_URL = "https://api.typesafe.ai/v1/systemone";
 const CHUNK = 20;
 
 function buildQuestions(n: number) {

@@ -6,6 +6,7 @@ import type { AnalysisResult } from "./translate";
 import { translateSubtitleChunk, translateSubtitleSingle, reconcileGlossary } from "./translate";
 import { splitIntoChunk, parseSubtitle, saveTranslated, normalizeCues } from "./subtitle";
 import { hashContent, analysisCachePath, appendAnalysisFailureLog, getOrCreateAnalysis, formatAnalysisContext, alignPlotSummaryWithGlossary, filterGlossaryForText } from "./analysis";
+import { planReconciliation } from "./nameMatch";
 import { detectCodeIssues, isTraditionalChineseTarget, isChineseTarget, checkWithJev, chooseWithJev, needsJevChoice, pickRetranslation } from "./quality";
 import {
   loadSeriesGlossary,
@@ -221,10 +222,25 @@ export async function translateFile(
         // 調和失敗不阻斷翻譯，退回原始詞彙表。
         let episodeGlossary = analysisData.glossary;
         const newPersons = episodeGlossary.filter((g) => g.category === "person");
-        const shouldReconcile =
+        let shouldReconcile =
           newPersons.length > 0 &&
           (newPersons.length >= 2 ||
             seriesTerms.some((g) => g.category === "person"));
+        // 有 Jev key 時改由人名配對篩選決定：只有「同一人且譯名不一致」或證據不足
+        // 才呼叫 LLM 調和；Jev 失敗則沿用上面的啟發式規則
+        let hints: [string, string][] = [];
+        if (shouldReconcile && params.typesafeApiKey) {
+          try {
+            const plan = await planReconciliation(episodeGlossary, seriesTerms, allTexts, params.typesafeApiKey);
+            shouldReconcile = plan.reconcile;
+            hints = plan.hints;
+            console.log(
+              `Name matching: ${plan.reconcile ? "reconcile" : "skip reconciliation"} (Jev same-person pairs: ${plan.hints.map((h) => h.join(" = ")).join(", ") || "none"})`
+            );
+          } catch (planErr) {
+            console.warn("Jev name matching failed, falling back to heuristic:", planErr);
+          }
+        }
         if (shouldReconcile) {
           try {
             const reconciled = await reconcileGlossary(episodeGlossary, seriesTerms, {
@@ -234,6 +250,7 @@ export async function translateFile(
               lang: params.lang || "",
               temperature: 0.3,
               disableThinking: (params.analysisThinkingMode ?? "light") !== "keep",
+              hints,
             });
             episodeGlossary = enforceReconciliation(
               reconciled,

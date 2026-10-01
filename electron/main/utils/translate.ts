@@ -460,6 +460,7 @@ async function reconcileGlossary(
     lang,
     temperature = 0.3,
     disableThinking,
+    hints,
   }: {
     apiKeys: string[];
     apiHost: string;
@@ -467,6 +468,8 @@ async function reconcileGlossary(
     lang: string;
     temperature?: number;
     disableThinking?: boolean;
+    // 已確認為同一人的配對（Jev 判斷），寫進 prompt 讓模型統一譯名
+    hints?: [string, string][];
   }
 ): Promise<GlossaryEntry[]> {
   if (apiKeys.length === 0) {
@@ -500,7 +503,13 @@ Rules:
 
 Output format: reply with ONE JSON object and nothing else, exactly this shape:
 {"glossary": [{"term": "<term as provided>", "translation": "<${lang} rendering>", "category": "person" | "place" | "organization" | "term"}]}`,
-    prompt: `${lockedSection}NEW entries to reconcile:\n${formatEntries(newEntries)}`,
+    prompt:
+      `${lockedSection}NEW entries to reconcile:\n${formatEntries(newEntries)}` +
+      (hints && hints.length
+        ? `\n\nThese pairs are confirmed to be the same person; give them consistent translations:\n${hints
+            .map(([x, y]) => `- ${x} = ${y}`)
+            .join("\n")}`
+        : ""),
     providerOptions: noThinkingOptions(disableThinking),
     label: "Glossary reconciliation",
   });
