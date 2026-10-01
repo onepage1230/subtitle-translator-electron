@@ -13,11 +13,14 @@
     "searchOrEnterModel": "搜索或输入模型名称",
     "noModelsFound": "找不到模型",
     "pressEnterToUse": "按 Enter 使用",
-    "disableAnalysisThinking": {
-    "title": "分析时关闭思考",
-    "description": "全局分析与词汇表调和时，要求推理模型（如 Qwen3）不输出思考过程，可大幅缩短分析时间。若服务器不支持 chat_template_kwargs 而报错，请关闭此选项。"
-  },
-  "temperature": {
+    "analysisThinkingMode": {
+      "title": "分析时的思考模式",
+      "description": "推理模型（如 Qwen3）在全局分析时是否输出思考过程。保留思考较准确但很慢；关闭需服务器支持 chat_template_kwargs，不支持而报错时请选「全部保留思考」。",
+      "keep": "全部保留思考",
+      "light": "只在调和与合成时关闭（建议）",
+      "off": "全部关闭（最快，但剧情摘要可能搞错人物）"
+    },
+    "temperature": {
       "title": "溫度",
       "description": "采樣溫度影響語言模型生成文本的隨機性與確定性。較低的溫度（如 0.2）產生較確定、精確的文本，適合正式文件；而較高的溫度（如 0.8）則讓文本更具創意和多樣性，適合創作用途。通过适当调整这个参数，可以让模型输出更符合特定的使用需求。"
     },

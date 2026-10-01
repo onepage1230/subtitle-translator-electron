@@ -65,6 +65,8 @@ async function retryTranslate(fn, params, maxRetries = 5, delay = 1000) {
   }
 }
 
+export type AnalysisThinkingMode = "keep" | "light" | "off";
+
 export interface TranslateParams {
   apiKeys: string[];
   apiHost?: string;
@@ -79,8 +81,9 @@ export interface TranslateParams {
   concurrentRequests?: number;
   forceReanalyze?: boolean;
   typesafeApiKey?: string;
-  // 分析步驟（段落分析、摘要合成、詞彙表調和）關閉推理模型的 thinking
-  disableAnalysisThinking?: boolean;
+  // 分析步驟的推理模型 thinking：keep 全保留；light 只在摘要合成與詞彙表調和關閉
+  // （段落分析需要推理人物關係，關閉時 E02 摘要錯置人物，2026-10-01 實驗）；off 全關
+  analysisThinkingMode?: AnalysisThinkingMode;
 }
 
 export interface ProgressEvent {
@@ -204,7 +207,8 @@ export async function translateFile(
           apiHost: params.apiHost || "https://api.openai.com/v1",
           model: params.model || "",
           lang: params.lang || "",
-          disableThinking: params.disableAnalysisThinking,
+          disableThinking: params.analysisThinkingMode === "off",
+          disableAuxThinking: (params.analysisThinkingMode ?? "light") !== "keep",
         },
         existingGlossary: seriesTerms,
         onSectionFailures: (failed, total) => {
@@ -229,7 +233,7 @@ export async function translateFile(
               model: params.model || "",
               lang: params.lang || "",
               temperature: 0.3,
-              disableThinking: params.disableAnalysisThinking,
+              disableThinking: (params.analysisThinkingMode ?? "light") !== "keep",
             });
             episodeGlossary = enforceReconciliation(
               reconciled,

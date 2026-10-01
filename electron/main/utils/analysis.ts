@@ -145,7 +145,7 @@ async function getOrCreateAnalysis(opts: {
   cacheFile: string;
   contentHash: string;
   forceReanalyze: boolean;
-  params: { apiKeys: string[]; apiHost: string; model: string; lang: string; disableThinking?: boolean };
+  params: { apiKeys: string[]; apiHost: string; model: string; lang: string; disableThinking?: boolean; disableAuxThinking?: boolean };
   existingGlossary?: GlossaryEntry[];
   // 有段落失敗時回報（含全部失敗）；讀快取時不呼叫
   onSectionFailures?: (failed: number, total: number) => void;
@@ -201,7 +201,7 @@ async function getOrCreateAnalysis(opts: {
         model: params.model,
         lang: params.lang,
         temperature: 0.3,
-        disableThinking: params.disableThinking,
+        disableThinking: params.disableAuxThinking,
       });
     } catch {
       plotSummary = summaries.map((s, i) => `[Act ${i + 1}]\n${s}`).join("\n\n");

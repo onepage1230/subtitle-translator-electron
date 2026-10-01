@@ -55,7 +55,7 @@ export default function TranslatorPanel() {
   const [apiHost] = useAPIHost();
   const [temperature] = useTemperature();
   const [typesafeApiKey] = useLocalStorage("typesafe_api_key", "");
-  const [disableAnalysisThinking] = useLocalStorage("disable_analysis_thinking", true);
+  const [analysisThinkingMode] = useLocalStorage("analysis_thinking_mode", "light");
   const [multiLangSave] = useLocalStorage("multi_language_save", "none");
   const [concurrentRequests] = useLocalStorage<number | undefined>(
     "concurrent_requests",
@@ -135,7 +135,7 @@ export default function TranslatorPanel() {
     forceReanalyze,
     concurrentRequests,
     typesafeApiKey,
-    disableAnalysisThinking,
+    analysisThinkingMode,
   });
 
   const executeBatchTranslation = async (forceReanalyze: boolean) => {
