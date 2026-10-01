@@ -75,4 +75,64 @@ describe("pipeline quality check", () => {
     expect(text).toContain("这是你好");
     expect(text).not.toContain("__FAILED__");
   });
+
+  // Jev 以 fetch stub 模擬：noul 題依 noul()、choice 題依 choice() 回答
+  function stubJev(noul: (i: number) => number, choice: () => string) {
+    const calls: any[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (_url: any, init: any) => {
+      const body = JSON.parse(init.body);
+      calls.push(body);
+      const answers: any = {};
+      Object.entries(body.questions).forEach(([k, q]: any, i) => {
+        answers[k] = q.type === "noul" ? { noul: noul(i) } : { choice: choice() };
+      });
+      return { ok: true, status: 200, json: async () => ({ answers }) } as any;
+    }));
+    return calls;
+  }
+  const JEV_PARAMS = { ...PARAMS, typesafeApiKey: "KEY" };
+
+  it("reverts to the original when the retranslation still has issues and Jev prefers the original", async () => {
+    const { file, out } = setup();
+    const calls = stubJev(() => 0.9, () => "original");
+    vi.mocked(translate.translateSubtitleSingle).mockReset().mockResolvedValue("这个你好" as any);
+    await translateFile({ path: file, name: "movie.srt" }, JEV_PARAMS, () => {});
+    expect(calls.some((b) => Object.values(b.questions).some((q: any) => q.type === "choice"))).toBe(true);
+    expect(fs.readFileSync(out, "utf8")).toContain("这是你好");
+    vi.unstubAllGlobals();
+  });
+
+  it("keeps a clean retranslation of a code-flagged line without asking Jev", async () => {
+    const { file, out } = setup();
+    const calls = stubJev(() => 0.9, () => "original");
+    vi.mocked(translate.translateSubtitleSingle).mockReset().mockResolvedValue("你好" as any);
+    await translateFile({ path: file, name: "movie.srt" }, JEV_PARAMS, () => {});
+    expect(calls.some((b) => Object.values(b.questions).some((q: any) => q.type === "choice"))).toBe(false);
+    expect(fs.readFileSync(out, "utf8")).toContain("你好");
+    expect(fs.readFileSync(out, "utf8")).not.toContain("这是你好");
+    vi.unstubAllGlobals();
+  });
+
+  it("asks Jev for a Jev-flagged line and reverts when Jev prefers the original", async () => {
+    const { file, out } = setup();
+    vi.mocked(translate.translateSubtitleChunk).mockReset().mockResolvedValue(["哈囉", "世界"] as any);
+    stubJev((i) => (i === 0 ? 0.1 : 0.9), () => "original");
+    vi.mocked(translate.translateSubtitleSingle).mockReset().mockResolvedValue("你好" as any);
+    await translateFile({ path: file, name: "movie.srt" }, JEV_PARAMS, () => {});
+    const text = fs.readFileSync(out, "utf8");
+    expect(text).toContain("哈囉");
+    expect(text).not.toContain("你好");
+    vi.unstubAllGlobals();
+  });
+
+  it("keeps the original of a Jev-flagged line when the retranslation introduces a code issue", async () => {
+    const { file, out } = setup();
+    vi.mocked(translate.translateSubtitleChunk).mockReset().mockResolvedValue(["哈囉", "世界"] as any);
+    const calls = stubJev((i) => (i === 0 ? 0.1 : 0.9), () => "retranslation");
+    vi.mocked(translate.translateSubtitleSingle).mockReset().mockResolvedValue("这是你好" as any);
+    await translateFile({ path: file, name: "movie.srt" }, JEV_PARAMS, () => {});
+    expect(calls.some((b) => Object.values(b.questions).some((q: any) => q.type === "choice"))).toBe(false);
+    expect(fs.readFileSync(out, "utf8")).toContain("哈囉");
+    vi.unstubAllGlobals();
+  });
 });

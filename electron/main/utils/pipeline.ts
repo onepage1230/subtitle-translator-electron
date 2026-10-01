@@ -6,7 +6,7 @@ import type { AnalysisResult } from "./translate";
 import { translateSubtitleChunk, translateSubtitleSingle, reconcileGlossary } from "./translate";
 import { splitIntoChunk, parseSubtitle, saveTranslated, normalizeCues } from "./subtitle";
 import { hashContent, analysisCachePath, appendAnalysisFailureLog, getOrCreateAnalysis, formatAnalysisContext, alignPlotSummaryWithGlossary, filterGlossaryForText } from "./analysis";
-import { detectCodeIssues, isTraditionalChineseTarget, isChineseTarget, checkWithJev } from "./quality";
+import { detectCodeIssues, isTraditionalChineseTarget, isChineseTarget, checkWithJev, chooseWithJev, needsJevChoice, pickRetranslation } from "./quality";
 import {
   loadSeriesGlossary,
   mergeIntoSeriesGlossary,
@@ -466,6 +466,11 @@ export async function translateFile(
 
     // 翻譯後品質檢查：把硬傷句清空，交給下方逐句 fallback 重翻（僅一次）
     const originalTranslations = new Map<any, string>();
+    const reasons = new Map<any, string[]>();
+    const traditional = isTraditionalChineseTarget(params.lang || "");
+    const chinese = traditional || isChineseTarget(params.lang || "");
+    const glossary = analysisData?.glossary ?? [];
+    const jevEnabled = !!params.typesafeApiKey;
     let codeFlagged = 0;
     let jevFlagged = 0;
     try {
@@ -480,10 +485,6 @@ export async function translateFile(
         );
       });
       const flagged = new Set<any>();
-      const traditional = isTraditionalChineseTarget(params.lang || "");
-      const chinese = traditional || isChineseTarget(params.lang || "");
-      const glossary = analysisData?.glossary ?? [];
-      const reasons = new Map<any, string[]>();
       for (const c of candidates) {
         const issues = detectCodeIssues(c.data.text, c.data.translatedText, { traditional, chinese, glossary });
         if (issues.length > 0) {
@@ -492,7 +493,6 @@ export async function translateFile(
           codeFlagged++;
         }
       }
-      const jevEnabled = !!params.typesafeApiKey;
       if (jevEnabled && candidates.length > 0) {
         const verdicts = await checkWithJev(
           candidates.map((c: any) => ({ source: c.data.text, translation: c.data.translatedText })),
@@ -590,6 +590,50 @@ export async function translateFile(
           }
         }
       }
+    }
+
+    // 重翻句選版本：重翻成功（譯文已變）的句子，比較原譯與新譯決定採用哪個
+    try {
+      const retranslated = Array.from(originalTranslations.keys()).filter(
+        (c: any) =>
+          c.data.translatedText !== originalTranslations.get(c) &&
+          c.data.translatedText !== "__FAILED__"
+      );
+      const issuesOf = (c: any, text: string) =>
+        detectCodeIssues(c.data.text, text, { traditional, chinese, glossary });
+      const decisions = retranslated.map((c: any) => ({
+        cue: c,
+        origIssues: (reasons.get(c) ?? []).filter((r) => r !== "jev"),
+        newIssues: issuesOf(c, c.data.translatedText),
+      }));
+      const ask = jevEnabled
+        ? decisions.filter((d) => needsJevChoice(d.origIssues, d.newIssues))
+        : [];
+      const choices = ask.length
+        ? await chooseWithJev(
+            ask.map((d) => ({
+              source: d.cue.data.text,
+              original: originalTranslations.get(d.cue)!,
+              retranslation: d.cue.data.translatedText,
+            })),
+            params.typesafeApiKey!
+          )
+        : [];
+      const choiceOf = new Map(ask.map((d, i) => [d.cue, choices[i]]));
+      let keptOriginal = 0;
+      for (const d of decisions) {
+        if (pickRetranslation(d.origIssues, d.newIssues, choiceOf.get(d.cue) ?? null) === "original") {
+          d.cue.data.translatedText = originalTranslations.get(d.cue);
+          keptOriginal++;
+        }
+      }
+      if (decisions.length) {
+        console.log(
+          `Retranslation choice: ${decisions.length - keptOriginal} retranslated kept, ${keptOriginal} reverted to original (Jev asked: ${ask.length})`
+        );
+      }
+    } catch (choiceErr) {
+      console.warn("Retranslation choice failed, keeping retranslations:", choiceErr);
     }
 
     // Final write
